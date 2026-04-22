@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -7,493 +8,482 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="My Assistant" />
-  <meta name="theme-color" content="#0C0C0F" />
+  <meta name="theme-color" content="#0B1120" />
   <title>My Assistant</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Literata:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
   <style>
-    html, body { margin: 0; padding: 0; background: #0C0C0F; height: 100%; }
+    html, body { margin: 0; padding: 0; background: #0B1120; height: 100%; }
     * { box-sizing: border-box; }
     ::-webkit-scrollbar { width: 0; }
-    input, textarea { outline: none; border: none; background: transparent; }
+    input { outline: none; border: none; background: transparent; }
     button { cursor: pointer; border: none; background: transparent; }
     .pill { transition: all 0.15s ease; }
-    .pill:active { transform: scale(0.95); }
-    .chat-bubble { animation: fadeUp 0.2s ease; }
-    @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
-    .fab:active { transform: scale(0.93); }
-    .nav-btn { transition: all 0.15s ease; }
-    .nav-btn:active { transform: scale(0.92); }
-    .sheet { animation: slideUp 0.25s ease; }
-    @keyframes slideUp { from { transform: translateY(100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
-    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    .pill:active { transform: scale(0.94); }
+    .chat-bubble { animation: fadeUp 0.18s ease; }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+    .fab:active { transform: scale(0.92); }
+    .sheet { animation: slideUp 0.22s cubic-bezier(0.32,0.72,0,1); }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    const CATEGORIES = {
-      personal: { label: "Personal", icon: "🏠", color: "#F97316" },
-      errands:  { label: "Errands",  icon: "🛒", color: "#10B981" },
-      work:     { label: "Work",     icon: "💼", color: "#6366F1" },
-      health:   { label: "Health",   icon: "🌿", color: "#EC4899" },
-    };
+```
+const C = {
+  bg:        "#0B1120",
+  surface:   "#111827",
+  surfaceUp: "#1A2438",
+  border:    "#1F2D45",
+  borderHi:  "#2A3F60",
+  text:      "#E8EEF7",
+  textMid:   "#8A9DC0",
+  textDim:   "#3E5070",
+  cyan:      "#00D4FF",
+  amber:     "#FFB830",
+  green:     "#00E5A0",
+  red:       "#FF4D6A",
+  violet:    "#7C6EFA",
+};
 
-    const PRIORITIES = {
-      high:   { label: "High",   color: "#EF4444" },
-      medium: { label: "Medium", color: "#F59E0B" },
-      low:    { label: "Low",    color: "#6B7280" },
-    };
+const CATEGORIES = {
+  personal: { label: "Personal", icon: "🏠", color: C.amber },
+  errands:  { label: "Errands",  icon: "🛒", color: C.green },
+  work:     { label: "Work",     icon: "💼", color: C.violet },
+  health:   { label: "Health",   icon: "🌿", color: C.cyan },
+};
 
-    const CLAUDE_SYSTEM = `You are a sharp, efficient personal assistant embedded in a task management app. Keep responses concise and actionable — this is a mobile app so brevity matters. Be warm but efficient.`;
+const PRIORITIES = {
+  high:   { label: "High",   color: C.red },
+  medium: { label: "Medium", color: C.amber },
+  low:    { label: "Low",    color: C.textMid },
+};
 
-    const sampleTasks = [
-      {
-        id: 1, text: "Go grocery shopping", category: "errands", priority: "medium", done: false, createdAt: Date.now() - 3600000,
-        subtasks: [
-          { id: 101, text: "Milk & eggs", done: false },
-          { id: 102, text: "Bread", done: false },
-          { id: 103, text: "Pasta & sauce", done: true },
-        ]
-      },
-      {
-        id: 2, text: "Review Q2 report", category: "work", priority: "high", done: false, createdAt: Date.now() - 7200000,
-        subtasks: [
-          { id: 201, text: "Check sales figures", done: false },
-          { id: 202, text: "Write summary", done: false },
-        ]
-      },
-      { id: 3, text: "30 min walk", category: "health", priority: "low", done: false, createdAt: Date.now() - 1800000, subtasks: [] },
-      { id: 4, text: "Call mom", category: "personal", priority: "medium", done: true, createdAt: Date.now() - 86400000, subtasks: [] },
-    ];
+const STORAGE_KEY = "myassistant_tasks_v2";
 
-    function SubtaskRow({ sub, onToggle, onDelete }) {
-      return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #1A1A28" }}>
-          <button onClick={onToggle} style={{
-            width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-            border: `1.5px solid ${sub.done ? "#F97316" : "#303045"}`,
-            background: sub.done ? "#F97316" : "transparent",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: 9, cursor: "pointer"
-          }}>{sub.done ? "✓" : ""}</button>
-          <span style={{ flex: 1, fontSize: 13, color: sub.done ? "#4A4A60" : "#C0BDB7", textDecoration: sub.done ? "line-through" : "none" }}>
-            {sub.text}
-          </span>
-          <button onClick={onDelete} style={{ color: "#2A2A3A", fontSize: 16, lineHeight: 1, cursor: "pointer", padding: "0 2px" }}>×</button>
-        </div>
-      );
+const defaultTasks = [
+  {
+    id: 1, text: "Go shopping", category: "errands", priority: "medium",
+    done: false, deferred: false, createdAt: Date.now() - 3600000,
+    subtasks: [
+      { id: 101, text: "Coffee Beans", done: false },
+      { id: 102, text: "Bourbon", done: false },
+      { id: 103, text: "Plant pots", done: false },
+      { id: 104, text: "Dracaena", done: false },
+      { id: 105, text: "Cocktail shaker", done: false },
+      { id: 106, text: "Gas can", done: false },
+      { id: 107, text: "Paper towels", done: false },
+      { id: 108, text: "Toilet seat", done: false },
+      { id: 109, text: "Stick lighter", done: false },
+      { id: 110, text: "Nate's gift", done: false },
+    ]
+  },
+  { id: 2, text: "Budget review", category: "personal", priority: "high", done: false, deferred: false, createdAt: Date.now() - 7200000, subtasks: [] },
+  { id: 3, text: "Wash truck", category: "personal", priority: "low", done: false, deferred: false, createdAt: Date.now() - 5400000, subtasks: [] },
+  { id: 4, text: "Go out for lunch", category: "personal", priority: "medium", done: false, deferred: false, createdAt: Date.now() - 3600000, subtasks: [] },
+  { id: 5, text: "Check for seat covers", category: "personal", priority: "medium", done: false, deferred: false, createdAt: Date.now() - 1800000, subtasks: [] },
+];
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      return saved.map(t => ({
+        ...t,
+        deferred: t.deferredUntil && new Date().toDateString() === new Date(t.deferredUntil).toDateString() ? false : t.deferred,
+        subtasks: t.subtasks || [],
+      }));
     }
+  } catch(e) {}
+  return defaultTasks;
+}
 
-    function TaskCard({ task, onToggle, onDelete, onToggleSub, onDeleteSub, onAddSub }) {
-      const [expanded, setExpanded] = useState(false);
-      const [newSub, setNewSub] = useState("");
-      const [addingNew, setAddingNew] = useState(false);
-      const cat = CATEGORIES[task.category] || CATEGORIES.personal;
-      const pri = PRIORITIES[task.priority] || PRIORITIES.medium;
-      const subtasks = task.subtasks || [];
-      const doneCount = subtasks.filter(s => s.done).length;
-      const hasSubtasks = subtasks.length > 0;
+function saveTasks(tasks) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch(e) {}
+}
 
-      const submitSub = () => {
-        if (!newSub.trim()) return;
-        onAddSub(task.id, newSub.trim());
-        setNewSub("");
-        setAddingNew(false);
-      };
+const CLAUDE_SYSTEM = "You are a sharp, efficient personal assistant embedded in a task management app. Keep responses concise and actionable — this is a mobile app so brevity matters. Be warm but efficient.";
 
-      return (
-        <div style={{ marginBottom: 8, borderRadius: 14, background: "#13131A", border: "1px solid #1E1E2A", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 14px 14px 16px" }}>
-            <button onClick={() => onToggle(task.id)} style={{
-              width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-              border: `2px solid ${task.done ? cat.color : "#303045"}`,
-              background: task.done ? cat.color : "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#fff", fontSize: 11, cursor: "pointer", transition: "all 0.2s"
-            }}>{task.done ? "✓" : ""}</button>
+function SubtaskRow({ sub, catColor, onToggle, onDelete }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid " + C.border }}>
+      <button onClick={onToggle} style={{
+        width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+        border: "1.5px solid " + (sub.done ? catColor : C.borderHi),
+        background: sub.done ? catColor + "33" : "transparent",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: catColor, fontSize: 9, cursor: "pointer", transition: "all 0.15s"
+      }}>{sub.done ? "✓" : ""}</button>
+      <span style={{ flex: 1, fontSize: 13, color: sub.done ? C.textDim : C.textMid, textDecoration: sub.done ? "line-through" : "none" }}>
+        {sub.text}
+      </span>
+      <button onClick={onDelete} style={{ color: C.textDim, fontSize: 16, lineHeight: 1, cursor: "pointer", padding: "0 2px" }}>×</button>
+    </div>
+  );
+}
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 14, fontWeight: 500, color: task.done ? "#4A4A60" : "#E8E5DF",
-                textDecoration: task.done ? "line-through" : "none", lineHeight: 1.3
-              }}>{task.text}</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 5, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 10, color: cat.color, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                  {cat.icon} {cat.label}
-                </span>
-                <span style={{ width: 3, height: 3, borderRadius: "50%", background: "#303045", flexShrink: 0 }} />
-                <span style={{ fontSize: 10, color: pri.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  {pri.label}
-                </span>
-                {hasSubtasks && (
-                  <React.Fragment>
-                    <span style={{ width: 3, height: 3, borderRadius: "50%", background: "#303045", flexShrink: 0 }} />
-                    <span style={{ fontSize: 10, color: "#6B6B80" }}>{doneCount}/{subtasks.length} steps</span>
-                  </React.Fragment>
-                )}
-              </div>
-            </div>
+function TaskCard({ task, onToggle, onDelete, onDefer, onToggleSub, onDeleteSub, onAddSub }) {
+  const [expanded, setExpanded] = useState(false);
+  const [newSub, setNewSub] = useState("");
+  const [addingNew, setAddingNew] = useState(false);
+  const cat = CATEGORIES[task.category] || CATEGORIES.personal;
+  const pri = PRIORITIES[task.priority] || PRIORITIES.medium;
+  const subtasks = task.subtasks || [];
+  const doneCount = subtasks.filter(s => s.done).length;
+  const hasSubtasks = subtasks.length > 0;
+  const progress = hasSubtasks ? doneCount / subtasks.length : 0;
 
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <button onClick={() => setExpanded(e => !e)} style={{
-                width: 26, height: 26, borderRadius: 8, background: "#1E1E2A",
-                color: "#5A5A70", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", transition: "all 0.15s", border: "1px solid #252535"
-              }}>
-                {expanded ? "▲" : "▼"}
-              </button>
-              <button onClick={() => onDelete(task.id)} style={{ color: "#2A2A3A", fontSize: 18, padding: "0 2px", lineHeight: 1, cursor: "pointer" }}>×</button>
-            </div>
-          </div>
+  const submitSub = () => {
+    if (!newSub.trim()) return;
+    onAddSub(task.id, newSub.trim());
+    setNewSub("");
+    setAddingNew(false);
+  };
 
-          {hasSubtasks && (
-            <div style={{ height: 2, background: "#1A1A24", margin: "0 16px" }}>
-              <div style={{
-                height: "100%", borderRadius: 4,
-                background: `linear-gradient(90deg, ${cat.color}, ${cat.color}AA)`,
-                width: `${(doneCount / subtasks.length) * 100}%`, transition: "width 0.3s ease"
-              }} />
-            </div>
-          )}
-
-          {expanded && (
-            <div style={{ padding: "6px 16px 12px 48px" }}>
-              {subtasks.map(sub => (
-                <SubtaskRow
-                  key={sub.id}
-                  sub={sub}
-                  onToggle={() => onToggleSub(task.id, sub.id)}
-                  onDelete={() => onDeleteSub(task.id, sub.id)}
-                />
-              ))}
-              {addingNew ? (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                  <input
-                    autoFocus
-                    value={newSub}
-                    onChange={e => setNewSub(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") submitSub(); if (e.key === "Escape") setAddingNew(false); }}
-                    placeholder="Add a step..."
-                    style={{
-                      flex: 1, padding: "7px 10px", background: "#1A1A24", borderRadius: 8,
-                      color: "#E8E5DF", fontSize: 13, border: "1px solid #2A2A3A", outline: "none"
-                    }}
-                  />
-                  <button onClick={submitSub} style={{
-                    padding: "7px 12px", borderRadius: 8, background: cat.color,
-                    color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer"
-                  }}>Add</button>
-                </div>
-              ) : (
-                <button onClick={() => setAddingNew(true)} style={{
-                  marginTop: 8, fontSize: 12, color: "#4A4A60", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 5, fontWeight: 500
-                }}>
-                  <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add step
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    function App() {
-      const [tasks, setTasks] = useState(sampleTasks);
-      const [filter, setFilter] = useState("all");
-      const [newTask, setNewTask] = useState("");
-      const [newCat, setNewCat] = useState("personal");
-      const [newPri, setNewPri] = useState("medium");
-      const [view, setView] = useState("tasks");
-      const [messages, setMessages] = useState([
-        { role: "assistant", text: "Hey! I'm your assistant. Ask me to help plan your day, brainstorm tasks, or anything else on your mind." }
-      ]);
-      const [chatInput, setChatInput] = useState("");
-      const [loading, setLoading] = useState(false);
-      const [addOpen, setAddOpen] = useState(false);
-      const chatEndRef = useRef(null);
-
-      useEffect(() => {
-        if (view === "chat") chatEndRef.current && chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-      }, [messages, view]);
-
-      const addTask = () => {
-        if (!newTask.trim()) return;
-        setTasks(prev => [...prev, {
-          id: Date.now(), text: newTask.trim(),
-          category: newCat, priority: newPri, done: false,
-          createdAt: Date.now(), subtasks: []
-        }]);
-        setNewTask("");
-        setAddOpen(false);
-      };
-
-      const toggleTask = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-      const deleteTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
-      const toggleSub = (taskId, subId) => setTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, subtasks: t.subtasks.map(s => s.id === subId ? { ...s, done: !s.done } : s) } : t
-      ));
-      const deleteSub = (taskId, subId) => setTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, subtasks: t.subtasks.filter(s => s.id !== subId) } : t
-      ));
-      const addSub = (taskId, text) => setTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, subtasks: [...(t.subtasks || []), { id: Date.now(), text, done: false }] } : t
-      ));
-
-      const visibleTasks = tasks.filter(t => {
-        if (filter === "all") return !t.done;
-        if (filter === "done") return t.done;
-        return t.category === filter && !t.done;
-      });
-
-      const sendChat = async () => {
-        if (!chatInput.trim() || loading) return;
-        const userMsg = chatInput.trim();
-        setChatInput("");
-        const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-        const taskSummary = tasks.filter(t => !t.done).map(t => {
-          const subs = (t.subtasks || []).map(s => `    • ${s.text}${s.done ? " ✓" : ""}`).join("\n");
-          return `- ${t.text} [${t.category}, ${t.priority}]${subs ? "\n" + subs : ""}`;
-        }).join("\n");
-        const newMessages = [...messages, { role: "user", text: userMsg }];
-        setMessages(newMessages);
-        setLoading(true);
-        try {
-          const apiMessages = newMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
-          apiMessages[apiMessages.length - 1].content = `Today is ${today}. Current open tasks:\n${taskSummary || "None"}\n\nUser: ${userMsg}`;
-          const res = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "claude-sonnet-4-20250514",
-              max_tokens: 1000,
-              system: CLAUDE_SYSTEM,
-              messages: apiMessages,
-            }),
-          });
-          const data = await res.json();
-          const reply = (data.content && data.content.find(b => b.type === "text") && data.content.find(b => b.type === "text").text) || "Sorry, something went wrong.";
-          setMessages(prev => [...prev, { role: "assistant", text: reply }]);
-        } catch(e) {
-          setMessages(prev => [...prev, { role: "assistant", text: "Couldn't reach the assistant right now." }]);
-        }
-        setLoading(false);
-      };
-
-      const doneCt = tasks.filter(t => t.done).length;
-      const totalCt = tasks.length;
-
-      return (
-        <div style={{
-          minHeight: "100vh", background: "#0C0C0F", color: "#F0EDE8",
-          fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
-          display: "flex", flexDirection: "column", maxWidth: 430, margin: "0 auto",
-          position: "relative",
-        }}>
-          {/* Header */}
-          <div style={{ padding: "52px 24px 20px", background: "linear-gradient(180deg, #13131A 0%, #0C0C0F 100%)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: "#6B6B80", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
-                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                </div>
-                <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 30, lineHeight: 1.1, color: "#F0EDE8" }}>
-                  {view === "tasks" ? "Your Day" : "Assistant"}
-                </div>
-              </div>
-              {view === "tasks" && (
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 28, fontFamily: "'DM Serif Display', serif", color: "#F97316" }}>{doneCt}</div>
-                  <div style={{ fontSize: 11, color: "#6B6B80" }}>of {totalCt} done</div>
-                </div>
-              )}
-            </div>
-            {view === "tasks" && (
-              <div style={{ marginTop: 16, height: 3, background: "#1E1E2A", borderRadius: 4 }}>
-                <div style={{
-                  height: "100%", borderRadius: 4, background: "linear-gradient(90deg, #F97316, #FBBF24)",
-                  width: `${totalCt ? (doneCt / totalCt) * 100 : 0}%`, transition: "width 0.4s ease"
-                }} />
-              </div>
-            )}
-          </div>
-
-          {/* Filter pills */}
-          {view === "tasks" && (
-            <div style={{ padding: "12px 24px", display: "flex", gap: 8, overflowX: "auto" }}>
-              {[["all","All"],["errands","🛒 Errands"],["work","💼 Work"],["personal","🏠 Personal"],["health","🌿 Health"],["done","✓ Done"]].map(([val, lbl]) => (
-                <button key={val} className="pill" onClick={() => setFilter(val)} style={{
-                  padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, whiteSpace: "nowrap",
-                  background: filter === val ? "#F97316" : "#1A1A24",
-                  color: filter === val ? "#fff" : "#9090A8",
-                  border: filter === val ? "none" : "1px solid #222232"
-                }}>{lbl}</button>
-              ))}
-            </div>
-          )}
-
-          {/* Task list */}
-          {view === "tasks" && (
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 130px" }}>
-              {visibleTasks.length === 0 && (
-                <div style={{ textAlign: "center", padding: "60px 0", color: "#3A3A50" }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>✦</div>
-                  <div style={{ fontSize: 14 }}>{filter === "done" ? "Nothing completed yet" : "All clear here"}</div>
-                </div>
-              )}
-              {visibleTasks.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                  onToggleSub={toggleSub}
-                  onDeleteSub={deleteSub}
-                  onAddSub={addSub}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Chat view */}
-          {view === "chat" && (
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 110px" }}>
-              {messages.map((m, i) => (
-                <div key={i} className="chat-bubble" style={{
-                  display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10,
-                }}>
-                  <div style={{
-                    maxWidth: "82%", padding: "11px 15px",
-                    borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                    background: m.role === "user" ? "#F97316" : "#1A1A24",
-                    color: m.role === "user" ? "#fff" : "#D8D5CF",
-                    fontSize: 14, lineHeight: 1.5, fontWeight: m.role === "user" ? 500 : 400,
-                    border: m.role === "assistant" ? "1px solid #222232" : "none",
-                    whiteSpace: "pre-wrap"
-                  }}>{m.text}</div>
-                </div>
-              ))}
-              {loading && (
-                <div style={{ display: "flex", gap: 5, padding: "10px 14px", background: "#1A1A24", borderRadius: "18px 18px 18px 4px", width: "fit-content", marginBottom: 10 }}>
-                  {[0,1,2].map(i => (
-                    <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#F97316", animation: `bounce 1s ease ${i*0.15}s infinite` }} />
-                  ))}
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-          )}
-
-          {/* Add task sheet */}
-          {addOpen && (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "flex-end" }}
-              onClick={() => setAddOpen(false)}>
-              <div className="sheet" style={{ width: "100%", maxWidth: 430, margin: "0 auto", background: "#16161F", borderRadius: "20px 20px 0 0", padding: "24px 24px 44px", border: "1px solid #222232" }}
-                onClick={e => e.stopPropagation()}>
-                <div style={{ width: 36, height: 4, background: "#2E2E3F", borderRadius: 4, margin: "0 auto 20px" }} />
-                <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 20, marginBottom: 16 }}>New Task</div>
-                <input
-                  autoFocus
-                  placeholder="What needs to get done?"
-                  value={newTask}
-                  onChange={e => setNewTask(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addTask()}
-                  style={{ width: "100%", padding: "14px 16px", background: "#1E1E2A", borderRadius: 12, color: "#F0EDE8", fontSize: 15, marginBottom: 14, border: "1px solid #2A2A3A" }}
-                />
-                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                  {Object.entries(CATEGORIES).map(([k, v]) => (
-                    <button key={k} className="pill" onClick={() => setNewCat(k)} style={{
-                      padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500,
-                      background: newCat === k ? v.color + "22" : "#1E1E2A",
-                      color: newCat === k ? v.color : "#6B6B80",
-                      border: `1px solid ${newCat === k ? v.color + "55" : "#222232"}`
-                    }}>{v.icon} {v.label}</button>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                  {Object.entries(PRIORITIES).map(([k, v]) => (
-                    <button key={k} className="pill" onClick={() => setNewPri(k)} style={{
-                      padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, flex: 1,
-                      background: newPri === k ? v.color + "22" : "#1E1E2A",
-                      color: newPri === k ? v.color : "#6B6B80",
-                      border: `1px solid ${newPri === k ? v.color + "55" : "#222232"}`
-                    }}>{v.label}</button>
-                  ))}
-                </div>
-                <button onClick={addTask} style={{
-                  width: "100%", padding: "15px", borderRadius: 14, fontSize: 15, fontWeight: 600,
-                  background: "linear-gradient(135deg, #F97316, #F59E0B)", color: "#fff", cursor: "pointer"
-                }}>Add Task</button>
-              </div>
-            </div>
-          )}
-
-          {/* Bottom nav */}
+  return (
+    <div style={{
+      marginBottom: 8, borderRadius: 16,
+      background: task.deferred ? C.bg : C.surface,
+      border: "1px solid " + (task.deferred ? C.border : C.borderHi),
+      overflow: "hidden", opacity: task.deferred ? 0.5 : 1,
+      transition: "all 0.2s",
+    }}>
+      {hasSubtasks && (
+        <div style={{ height: 2, background: C.border }}>
           <div style={{
-            position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
-            width: "100%", maxWidth: 430, padding: "12px 32px 28px",
-            background: "linear-gradient(0deg, #0C0C0F 60%, transparent)",
-            display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 40
-          }}>
-            <button className="nav-btn" onClick={() => setView("tasks")} style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              color: view === "tasks" ? "#F97316" : "#4A4A60", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase"
-            }}>
-              <span style={{ fontSize: 22 }}>☑</span> Tasks
-            </button>
+            height: "100%", borderRadius: 2,
+            background: "linear-gradient(90deg, " + cat.color + ", " + cat.color + "88)",
+            width: (progress * 100) + "%", transition: "width 0.4s ease"
+          }} />
+        </div>
+      )}
 
-            {view === "tasks" && (
-              <button className="fab" onClick={() => setAddOpen(true)} style={{
-                width: 58, height: 58, borderRadius: "50%",
-                background: "linear-gradient(135deg, #F97316, #F59E0B)",
-                color: "#fff", fontSize: 28, display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 8px 24px rgba(249,115,22,0.4)", cursor: "pointer"
-              }}>+</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 14px" }}>
+        <button onClick={() => onToggle(task.id)} style={{
+          width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
+          border: "2px solid " + (task.done ? cat.color : C.borderHi),
+          background: task.done ? cat.color + "33" : "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: cat.color, fontSize: 11, cursor: "pointer", transition: "all 0.2s"
+        }}>{task.done ? "✓" : ""}</button>
+
+        <div style={{ flex: 1, minWidth: 0 }} onClick={() => hasSubtasks && setExpanded(e => !e)}>
+          <div style={{
+            fontSize: 14, fontWeight: 500,
+            color: task.done ? C.textDim : C.text,
+            textDecoration: task.done ? "line-through" : "none", lineHeight: 1.3
+          }}>{task.text}</div>
+          <div style={{ display: "flex", gap: 7, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, color: cat.color, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              {cat.icon} {cat.label}
+            </span>
+            <span style={{ width: 2, height: 2, borderRadius: "50%", background: C.borderHi, flexShrink: 0 }} />
+            <span style={{ fontSize: 10, color: pri.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {pri.label}
+            </span>
+            {hasSubtasks && (
+              <React.Fragment>
+                <span style={{ width: 2, height: 2, borderRadius: "50%", background: C.borderHi, flexShrink: 0 }} />
+                <span style={{ fontSize: 10, color: C.textMid }}>{doneCount}/{subtasks.length} steps</span>
+              </React.Fragment>
             )}
-
-            {view === "chat" && (
-              <div style={{ flex: 1, display: "flex", gap: 10, alignItems: "center", padding: "0 16px" }}>
-                <input
-                  placeholder="Ask your assistant..."
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && sendChat()}
-                  style={{
-                    flex: 1, padding: "12px 16px", background: "#1A1A24", borderRadius: 24,
-                    color: "#F0EDE8", fontSize: 14, border: "1px solid #2A2A3A"
-                  }}
-                />
-                <button onClick={sendChat} disabled={loading} style={{
-                  width: 42, height: 42, borderRadius: "50%",
-                  background: chatInput.trim() ? "linear-gradient(135deg, #F97316, #F59E0B)" : "#1A1A24",
-                  color: chatInput.trim() ? "#fff" : "#4A4A60",
-                  fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 0.2s", border: "1px solid #2A2A3A", cursor: "pointer"
-                }}>→</button>
-              </div>
+            {task.deferred && (
+              <React.Fragment>
+                <span style={{ width: 2, height: 2, borderRadius: "50%", background: C.borderHi, flexShrink: 0 }} />
+                <span style={{ fontSize: 10, color: C.cyan }}>→ Tomorrow</span>
+              </React.Fragment>
             )}
-
-            <button className="nav-btn" onClick={() => setView("chat")} style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              color: view === "chat" ? "#F97316" : "#4A4A60", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase"
-            }}>
-              <span style={{ fontSize: 22 }}>◎</span> Assistant
-            </button>
           </div>
         </div>
-      );
-    }
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          {!task.done && (
+            <button onClick={() => onDefer(task.id)} title="Defer to tomorrow" style={{
+              width: 26, height: 26, borderRadius: 8,
+              background: task.deferred ? C.cyan + "22" : C.surfaceUp,
+              color: task.deferred ? C.cyan : C.textMid,
+              fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", border: "1px solid " + (task.deferred ? C.cyan + "44" : C.border),
+              transition: "all 0.15s"
+            }}>→</button>
+          )}
+          <button onClick={() => setExpanded(e => !e)} style={{
+            width: 26, height: 26, borderRadius: 8, background: C.surfaceUp,
+            color: C.textMid, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", border: "1px solid " + C.border
+          }}>{expanded ? "▲" : "▼"}</button>
+          <button onClick={() => onDelete(task.id)} style={{ color: C.textDim, fontSize: 18, padding: "0 2px", lineHeight: 1, cursor: "pointer" }}>×</button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "2px 14px 12px 50px", borderTop: "1px solid " + C.border }}>
+          {subtasks.map(sub => (
+            <SubtaskRow
+              key={sub.id}
+              sub={sub}
+              catColor={cat.color}
+              onToggle={() => onToggleSub(task.id, sub.id)}
+              onDelete={() => onDeleteSub(task.id, sub.id)}
+            />
+          ))}
+          {addingNew ? (
+            <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+              <input
+                autoFocus
+                value={newSub}
+                onChange={e => setNewSub(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") submitSub(); if (e.key === "Escape") setAddingNew(false); }}
+                placeholder="Add a step..."
+                style={{ flex: 1, padding: "7px 10px", background: C.surfaceUp, borderRadius: 8, color: C.text, fontSize: 13, border: "1px solid " + C.borderHi, outline: "none" }}
+              />
+              <button onClick={submitSub} style={{ padding: "7px 12px", borderRadius: 8, background: cat.color, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
+            </div>
+          ) : (
+            <button onClick={() => setAddingNew(true)} style={{ marginTop: 8, fontSize: 12, color: C.textDim, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontWeight: 500 }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add step
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [tasks, setTasks] = useState(() => loadTasks());
+  const [filter, setFilter] = useState("all");
+  const [newTask, setNewTask] = useState("");
+  const [newCat, setNewCat] = useState("personal");
+  const [newPri, setNewPri] = useState("medium");
+  const [view, setView] = useState("tasks");
+  const [messages, setMessages] = useState([
+    { role: "assistant", text: "Hey! I'm your assistant. Ask me to help plan your day, brainstorm tasks, or anything else on your mind." }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const chatEndRef = useRef(null);
+
+  useEffect(() => { saveTasks(tasks); }, [tasks]);
+  useEffect(() => { if (view === "chat" && chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, view]);
+
+  const addTask = () => {
+    if (!newTask.trim()) return;
+    setTasks(prev => [...prev, { id: Date.now(), text: newTask.trim(), category: newCat, priority: newPri, done: false, deferred: false, createdAt: Date.now(), subtasks: [] }]);
+    setNewTask("");
+    setAddOpen(false);
+  };
+
+  const toggleTask = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const deleteTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
+  const deferTask  = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, deferred: !t.deferred, deferredUntil: !t.deferred ? Date.now() + 86400000 : null } : t));
+  const toggleSub  = (tid, sid) => setTasks(prev => prev.map(t => t.id === tid ? { ...t, subtasks: t.subtasks.map(s => s.id === sid ? { ...s, done: !s.done } : s) } : t));
+  const deleteSub  = (tid, sid) => setTasks(prev => prev.map(t => t.id === tid ? { ...t, subtasks: t.subtasks.filter(s => s.id !== sid) } : t));
+  const addSub     = (tid, text) => setTasks(prev => prev.map(t => t.id === tid ? { ...t, subtasks: [...(t.subtasks || []), { id: Date.now(), text, done: false }] } : t));
+
+  const visibleTasks = tasks.filter(t => {
+    if (filter === "done") return t.done;
+    if (filter === "deferred") return t.deferred && !t.done;
+    if (filter === "all") return !t.done && !t.deferred;
+    return t.category === filter && !t.done && !t.deferred;
+  });
+
+  const sendChat = async () => {
+    if (!chatInput.trim() || loading) return;
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    const taskSummary = tasks.filter(t => !t.done).map(t => {
+      const subs = (t.subtasks || []).map(s => "    • " + s.text + (s.done ? " ✓" : "")).join("\n");
+      return "- " + t.text + " [" + t.category + ", " + t.priority + (t.deferred ? ", deferred" : "") + "]" + (subs ? "\n" + subs : "");
+    }).join("\n");
+    const newMessages = [...messages, { role: "user", text: userMsg }];
+    setMessages(newMessages);
+    setLoading(true);
+    try {
+      const apiMessages = newMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
+      apiMessages[apiMessages.length - 1].content = "Today is " + today + ". Current tasks:\n" + (taskSummary || "None") + "\n\nUser: " + userMsg;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: CLAUDE_SYSTEM, messages: apiMessages }),
+      });
+      const data = await res.json();
+      const reply = (data.content && data.content.find(b => b.type === "text") && data.content.find(b => b.type === "text").text) || "Sorry, something went wrong.";
+      setMessages(prev => [...prev, { role: "assistant", text: reply }]);
+    } catch(e) {
+      setMessages(prev => [...prev, { role: "assistant", text: "Couldn't reach the assistant right now." }]);
+    }
+    setLoading(false);
+  };
+
+  const doneCt  = tasks.filter(t => t.done).length;
+  const totalCt = tasks.length;
+  const deferCt = tasks.filter(t => t.deferred && !t.done).length;
+
+  const filters = [["all","Today"],["errands","🛒"],["work","💼"],["personal","🏠"],["health","🌿"],["deferred","→ Tomorrow"],["done","✓ Done"]];
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Syne', 'Helvetica Neue', sans-serif", display: "flex", flexDirection: "column", maxWidth: 430, margin: "0 auto", position: "relative" }}>
+
+      {/* Header */}
+      <div style={{ padding: "50px 22px 16px", background: "linear-gradient(180deg, " + C.surface + " 0%, " + C.bg + " 100%)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.cyan, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 3 }}>
+              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+            </div>
+            <div style={{ fontFamily: "'Literata', serif", fontSize: 32, lineHeight: 1.1, color: C.text, fontWeight: 300 }}>
+              {view === "tasks" ? "Your Day" : "Assistant"}
+            </div>
+          </div>
+          {view === "tasks" && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 30, fontFamily: "'Syne', sans-serif", fontWeight: 800, color: C.amber, lineHeight: 1 }}>{doneCt}</div>
+              <div style={{ fontSize: 10, color: C.textMid, marginTop: 2 }}>of {totalCt} done</div>
+              {deferCt > 0 && <div style={{ fontSize: 10, color: C.cyan, marginTop: 1 }}>{deferCt} tomorrow</div>}
+            </div>
+          )}
+        </div>
+        {view === "tasks" && totalCt > 0 && (
+          <div style={{ marginTop: 14, height: 3, background: C.border, borderRadius: 4 }}>
+            <div style={{ height: "100%", borderRadius: 4, background: "linear-gradient(90deg, " + C.cyan + ", " + C.green + ")", width: ((doneCt / totalCt) * 100) + "%", transition: "width 0.5s ease", boxShadow: "0 0 8px " + C.cyan + "66" }} />
+          </div>
+        )}
+      </div>
+
+      {/* Filter pills */}
+      {view === "tasks" && (
+        <div style={{ padding: "10px 22px", display: "flex", gap: 6, overflowX: "auto" }}>
+          {filters.map(([val, lbl]) => {
+            const active = filter === val;
+            return (
+              <button key={val} className="pill" onClick={() => setFilter(val)} style={{
+                padding: "5px 13px", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", letterSpacing: "0.04em",
+                background: active ? C.cyan : C.surfaceUp, color: active ? C.bg : C.textMid,
+                border: "1px solid " + (active ? C.cyan : C.border),
+                boxShadow: active ? "0 0 12px " + C.cyan + "44" : "none"
+              }}>{lbl}</button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Task list */}
+      {view === "tasks" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: "6px 18px 130px" }}>
+          {visibleTasks.length === 0 && (
+            <div style={{ textAlign: "center", padding: "60px 0", color: C.textDim }}>
+              <div style={{ fontSize: 36, marginBottom: 10, animation: "pulse 3s ease infinite" }}>◈</div>
+              <div style={{ fontSize: 13 }}>{filter === "done" ? "Nothing completed yet" : filter === "deferred" ? "No deferred tasks" : "All clear — nice work"}</div>
+            </div>
+          )}
+          {visibleTasks.map(task => (
+            <TaskCard key={task.id} task={task} onToggle={toggleTask} onDelete={deleteTask} onDefer={deferTask} onToggleSub={toggleSub} onDeleteSub={deleteSub} onAddSub={addSub} />
+          ))}
+        </div>
+      )}
+
+      {/* Chat */}
+      {view === "chat" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 18px 110px" }}>
+          {messages.map((m, i) => (
+            <div key={i} className="chat-bubble" style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+              <div style={{
+                maxWidth: "82%", padding: "11px 15px",
+                borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                background: m.role === "user" ? C.cyan : C.surface,
+                color: m.role === "user" ? C.bg : C.textMid,
+                fontSize: 14, lineHeight: 1.55, fontWeight: m.role === "user" ? 600 : 400,
+                border: m.role === "assistant" ? "1px solid " + C.border : "none",
+                whiteSpace: "pre-wrap",
+                boxShadow: m.role === "user" ? "0 0 16px " + C.cyan + "33" : "none"
+              }}>{m.text}</div>
+            </div>
+          ))}
+          {loading && (
+            <div style={{ display: "flex", gap: 5, padding: "10px 14px", background: C.surface, border: "1px solid " + C.border, borderRadius: "18px 18px 18px 4px", width: "fit-content", marginBottom: 10 }}>
+              {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: C.cyan, animation: "bounce 0.9s ease " + (i*0.15) + "s infinite" }} />)}
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+      )}
+
+      {/* Add task sheet */}
+      {addOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 50, display: "flex", alignItems: "flex-end" }} onClick={() => setAddOpen(false)}>
+          <div className="sheet" style={{ width: "100%", maxWidth: 430, margin: "0 auto", background: C.surface, borderRadius: "22px 22px 0 0", padding: "22px 22px 44px", border: "1px solid " + C.borderHi }} onClick={e => e.stopPropagation()}>
+            <div style={{ width: 36, height: 3, background: C.borderHi, borderRadius: 4, margin: "0 auto 18px" }} />
+            <div style={{ fontFamily: "'Literata', serif", fontSize: 22, marginBottom: 14, fontWeight: 300, color: C.text }}>New Task</div>
+            <input autoFocus placeholder="What needs to get done?" value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={e => e.key === "Enter" && addTask()}
+              style={{ width: "100%", padding: "13px 15px", background: C.surfaceUp, borderRadius: 12, color: C.text, fontSize: 15, marginBottom: 14, border: "1px solid " + C.borderHi }} />
+            <div style={{ display: "flex", gap: 7, marginBottom: 12, flexWrap: "wrap" }}>
+              {Object.entries(CATEGORIES).map(([k, v]) => (
+                <button key={k} className="pill" onClick={() => setNewCat(k)} style={{
+                  padding: "6px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                  background: newCat === k ? v.color + "22" : C.surfaceUp, color: newCat === k ? v.color : C.textMid,
+                  border: "1px solid " + (newCat === k ? v.color + "66" : C.border),
+                  boxShadow: newCat === k ? "0 0 8px " + v.color + "33" : "none"
+                }}>{v.icon} {v.label}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 7, marginBottom: 18 }}>
+              {Object.entries(PRIORITIES).map(([k, v]) => (
+                <button key={k} className="pill" onClick={() => setNewPri(k)} style={{
+                  padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 600, flex: 1,
+                  background: newPri === k ? v.color + "22" : C.surfaceUp, color: newPri === k ? v.color : C.textMid,
+                  border: "1px solid " + (newPri === k ? v.color + "66" : C.border),
+                  boxShadow: newPri === k ? "0 0 8px " + v.color + "33" : "none"
+                }}>{v.label}</button>
+              ))}
+            </div>
+            <button onClick={addTask} style={{ width: "100%", padding: "15px", borderRadius: 14, fontSize: 15, fontWeight: 700, background: "linear-gradient(135deg, " + C.cyan + ", " + C.green + ")", color: C.bg, letterSpacing: "0.04em", boxShadow: "0 4px 20px " + C.cyan + "44", cursor: "pointer" }}>Add Task</button>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom nav */}
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, padding: "10px 28px 30px", background: "linear-gradient(0deg, " + C.bg + " 55%, transparent)", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 40 }}>
+        <button onClick={() => setView("tasks")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: view === "tasks" ? C.cyan : C.textDim, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", filter: view === "tasks" ? "drop-shadow(0 0 6px " + C.cyan + ")" : "none", transition: "all 0.15s" }}>
+          <span style={{ fontSize: 22 }}>☑</span> Tasks
+        </button>
+
+        {view === "tasks" && (
+          <button className="fab" onClick={() => setAddOpen(true)} style={{ width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg, " + C.cyan + ", " + C.green + ")", color: C.bg, fontSize: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 24px " + C.cyan + "55", cursor: "pointer" }}>+</button>
+        )}
+
+        {view === "chat" && (
+          <div style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", padding: "0 14px" }}>
+            <input placeholder="Ask your assistant..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()}
+              style={{ flex: 1, padding: "11px 15px", background: C.surface, borderRadius: 24, color: C.text, fontSize: 14, border: "1px solid " + C.borderHi }} />
+            <button onClick={sendChat} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", background: chatInput.trim() ? "linear-gradient(135deg, " + C.cyan + ", " + C.green + ")" : C.surfaceUp, color: chatInput.trim() ? C.bg : C.textDim, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", border: "1px solid " + C.border, boxShadow: chatInput.trim() ? "0 0 14px " + C.cyan + "44" : "none", cursor: "pointer" }}>→</button>
+          </div>
+        )}
+
+        <button onClick={() => setView("chat")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: view === "chat" ? C.cyan : C.textDim, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", filter: view === "chat" ? "drop-shadow(0 0 6px " + C.cyan + ")" : "none", transition: "all 0.15s" }}>
+          <span style={{ fontSize: 22 }}>◎</span> Assistant
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+```
+
   </script>
 </body>
 </html>
