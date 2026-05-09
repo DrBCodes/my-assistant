@@ -20,7 +20,7 @@
     html, body { margin: 0; padding: 0; background: #0B1120; height: 100%; }
     * { box-sizing: border-box; }
     ::-webkit-scrollbar { width: 0; }
-    input, textarea { outline: none; border: none; background: transparent; }
+    input, textarea { outline: none; border: none; background: transparent; font-family: inherit; }
     button { cursor: pointer; border: none; background: transparent; }
     .pill { transition: all 0.15s ease; }
     .pill:active { transform: scale(0.94); }
@@ -331,7 +331,7 @@ function ImportSheet({cc,cats,catOrder,onImport,onClose}){
           value={text}
           onChange={e=>setText(e.target.value)}
           placeholder={"Buy groceries\nCall the dentist\nFinish the report\n..."}
-          style={{width:"100%",minHeight:140,padding:"12px 14px",background:cc.surfaceUp,borderRadius:12,color:cc.text,fontSize:14,border:`1px solid ${cc.borderHi}`,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"inherit"}}
+          style={{width:"100%",minHeight:140,padding:"12px 14px",background:cc.surfaceUp,borderRadius:12,color:cc.text,fontSize:14,border:`1px solid ${cc.borderHi}`,outline:"none",resize:"none",lineHeight:1.6,fontFamily:"inherit",display:"block"}}
         />
 
         {lines.length>0&&(
