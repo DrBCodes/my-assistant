@@ -33,365 +33,586 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
-    const C = {
-      bg:"#0B1120", surface:"#111827", surfaceUp:"#1A2438",
-      border:"#1F2D45", borderHi:"#2A3F60",
-      text:"#E8EEF7", textMid:"#8A9DC0", textDim:"#3E5070",
-      cyan:"#00D4FF", amber:"#FFB830", green:"#00E5A0",
-      red:"#FF4D6A", violet:"#7C6EFA",
-    };
+const C = {
+  bg:"#0B1120", surface:"#111827", surfaceUp:"#1A2438",
+  border:"#1F2D45", borderHi:"#2A3F60",
+  text:"#E8EEF7", textMid:"#8A9DC0", textDim:"#3E5070",
+  cyan:"#00D4FF", amber:"#FFB830", green:"#00E5A0",
+  red:"#FF4D6A", violet:"#7C6EFA",
+};
 
-    const CATEGORIES = {
-      personal: { label:"Personal", icon:"🏠", color:C.amber },
-      work:     { label:"Work",     icon:"💼", color:C.violet },
-      health:   { label:"Health",   icon:"🌿", color:C.cyan },
-      errands:  { label:"Errands",  icon:"🛒", color:C.green },
-    };
+const CATEGORIES = {
+  personal: { label:"Personal", icon:"🏠", color:C.amber },
+  work:     { label:"Work",     icon:"💼", color:C.violet },
+  health:   { label:"Health",   icon:"🌿", color:C.cyan },
+  errands:  { label:"Errands",  icon:"🛒", color:C.green },
+};
 
-    const PRIORITY_SCORE = { high:3, medium:2, low:1 };
+const PRIORITY_SCORE  = { high:3, medium:2, low:1 };
+const MULTI_CAT_BONUS = 5;
 
-    const PRIORITIES = {
-      high:   { label:"High",   color:C.red },
-      medium: { label:"Medium", color:C.amber },
-      low:    { label:"Low",    color:C.textMid },
-    };
+const PRIORITIES = {
+  high:   { label:"High",   color:C.red },
+  medium: { label:"Medium", color:C.amber },
+  low:    { label:"Low",    color:C.textMid },
+};
 
-    const TASKS_KEY    = "myassistant_tasks_v2";
-    const CATORDER_KEY = "myassistant_catorder_v1";
-    const DEFAULT_CAT_ORDER = ["personal","work","health","errands"];
+const TASKS_KEY    = "myassistant_tasks_v2";
+const CATORDER_KEY = "myassistant_catorder_v1";
+const DEFAULT_CAT_ORDER = ["personal","work","health","errands"];
 
-    const defaultTasks = [
-      { id:1, text:"Go shopping", category:"errands", priority:"medium", done:false, deferred:false, createdAt:Date.now()-3600000,
-        subtasks:[
-          {id:101,text:"Coffee Beans",done:false},{id:102,text:"Bourbon",done:false},
-          {id:103,text:"Plant pots",done:false},{id:104,text:"Dracaena",done:false},
-          {id:105,text:"Cocktail shaker",done:false},{id:106,text:"Gas can",done:false},
-          {id:107,text:"Paper towels",done:false},{id:108,text:"Toilet seat",done:false},
-          {id:109,text:"Stick lighter",done:false},{id:110,text:"Nate's gift",done:false},
-        ]
-      },
-      {id:2,text:"Budget review",category:"personal",priority:"high",done:false,deferred:false,createdAt:Date.now()-7200000,subtasks:[]},
-      {id:3,text:"Wash truck",category:"personal",priority:"low",done:false,deferred:false,createdAt:Date.now()-5400000,subtasks:[]},
-      {id:4,text:"Go out for lunch",category:"personal",priority:"medium",done:false,deferred:false,createdAt:Date.now()-3600000,subtasks:[]},
-      {id:5,text:"Check for seat covers",category:"personal",priority:"medium",done:false,deferred:false,createdAt:Date.now()-1800000,subtasks:[]},
-    ];
+const defaultTasks = [
+  { id:1, text:"Go shopping", categories:["errands"], priority:"medium", done:false, deferred:false, createdAt:Date.now()-3600000,
+    subtasks:[
+      {id:101,text:"Coffee Beans",done:false},{id:102,text:"Bourbon",done:false},
+      {id:103,text:"Plant pots",done:false},{id:104,text:"Dracaena",done:false},
+      {id:105,text:"Cocktail shaker",done:false},{id:106,text:"Gas can",done:false},
+      {id:107,text:"Paper towels",done:false},{id:108,text:"Toilet seat",done:false},
+      {id:109,text:"Stick lighter",done:false},{id:110,text:"Nate's gift",done:false},
+    ]
+  },
+  {id:2,text:"Budget review",categories:["personal"],priority:"high",done:false,deferred:false,createdAt:Date.now()-7200000,subtasks:[]},
+  {id:3,text:"Wash truck",categories:["personal"],priority:"low",done:false,deferred:false,createdAt:Date.now()-5400000,subtasks:[]},
+  {id:4,text:"Go out for lunch",categories:["personal"],priority:"medium",done:false,deferred:false,createdAt:Date.now()-3600000,subtasks:[]},
+  {id:5,text:"Check for seat covers",categories:["personal"],priority:"medium",done:false,deferred:false,createdAt:Date.now()-1800000,subtasks:[]},
+];
 
-    function load(key, fallback) {
-      try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback; } catch(e) { return fallback; }
+function migrateTasks(tasks) {
+  return tasks.map(t => ({
+    ...t,
+    categories: t.categories || (t.category ? [t.category] : ["personal"]),
+    subtasks: t.subtasks || [],
+  }));
+}
+
+// Auto-restore: un-defer tasks whose deferredUntil date is today or past
+function restoreDeferredTasks(tasks) {
+  const todayStr = new Date().toDateString();
+  return tasks.map(t => {
+    if (!t.deferred || !t.deferredUntil) return t;
+    const deferredDate = new Date(t.deferredUntil).toDateString();
+    // Restore if the deferred date has arrived (today or past)
+    if (new Date(t.deferredUntil) <= new Date(new Date().toDateString() + " 23:59:59")) {
+      return { ...t, deferred: false, deferredUntil: null };
     }
-    function save(key, val) {
-      try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
-    }
+    return t;
+  });
+}
 
-    function taskScore(task, catOrder) {
-      const catRank = catOrder.length - catOrder.indexOf(task.category);
-      return catRank * 10 + (PRIORITY_SCORE[task.priority] || 1);
-    }
+function load(key, fallback) {
+  try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback; } catch(e) { return fallback; }
+}
+function save(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+}
 
-    function SubtaskRow({ sub, catColor, onToggle, onDelete }) {
-      return (
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid "+C.border}}>
-          <button onClick={onToggle} style={{width:18,height:18,borderRadius:4,flexShrink:0,border:"1.5px solid "+(sub.done?catColor:C.borderHi),background:sub.done?catColor+"33":"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:catColor,fontSize:9,cursor:"pointer",transition:"all 0.15s"}}>{sub.done?"✓":""}</button>
-          <span style={{flex:1,fontSize:13,color:sub.done?C.textDim:C.textMid,textDecoration:sub.done?"line-through":"none"}}>{sub.text}</span>
-          <button onClick={onDelete} style={{color:C.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:"0 2px"}}>×</button>
-        </div>
-      );
-    }
+function taskScore(task, catOrder) {
+  const cats = task.categories || ["personal"];
+  const bestCatRank = Math.max(...cats.map(c => catOrder.length - catOrder.indexOf(c)));
+  const priScore = PRIORITY_SCORE[task.priority] || 1;
+  const multiBonus = (cats.length - 1) * MULTI_CAT_BONUS;
+  return bestCatRank * 10 + priScore + multiBonus;
+}
 
-    function TaskCard({ task, catOrder, onToggle, onDelete, onDefer, onToggleSub, onDeleteSub, onAddSub }) {
-      const [expanded, setExpanded] = useState(false);
-      const [newSub, setNewSub] = useState("");
-      const [addingNew, setAddingNew] = useState(false);
-      const cat = CATEGORIES[task.category] || CATEGORIES.personal;
-      const pri = PRIORITIES[task.priority]  || PRIORITIES.medium;
-      const subtasks = task.subtasks || [];
-      const doneCount = subtasks.filter(s=>s.done).length;
-      const hasSubtasks = subtasks.length > 0;
-      const progress = hasSubtasks ? doneCount/subtasks.length : 0;
-      const catRank = catOrder.indexOf(task.category) + 1;
+// ── SubtaskRow ────────────────────────────────────────────────
+function SubtaskRow({ sub, catColor, onToggle, onDelete, editing, onTextChange }) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+      <button onClick={onToggle} style={{width:18,height:18,borderRadius:4,flexShrink:0,border:`1.5px solid ${sub.done?catColor:C.borderHi}`,background:sub.done?catColor+"33":"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:catColor,fontSize:9,cursor:"pointer",transition:"all 0.15s"}}>{sub.done?"✓":""}</button>
+      {editing ? (
+        <input value={sub.text} onChange={e=>onTextChange(e.target.value)}
+          style={{flex:1,fontSize:13,color:C.text,background:C.surfaceUp,border:`1px solid ${C.borderHi}`,borderRadius:6,padding:"3px 7px",outline:"none"}} />
+      ) : (
+        <span style={{flex:1,fontSize:13,color:sub.done?C.textDim:C.textMid,textDecoration:sub.done?"line-through":"none"}}>{sub.text}</span>
+      )}
+      <button onClick={onDelete} style={{color:C.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:"0 2px"}}>×</button>
+    </div>
+  );
+}
 
-      const submitSub = () => {
-        if (!newSub.trim()) return;
-        onAddSub(task.id, newSub.trim());
-        setNewSub(""); setAddingNew(false);
-      };
+// ── TaskCard ──────────────────────────────────────────────────
+function TaskCard({ task, catOrder, onToggle, onDelete, onDefer, onReclaim, onUpdate, onToggleSub, onDeleteSub, onAddSub, onUpdateSubText }) {
+  const [expanded,  setExpanded]  = useState(false);
+  const [editing,   setEditing]   = useState(false);
+  const [editText,  setEditText]  = useState(task.text);
+  const [editCats,  setEditCats]  = useState(task.categories || ["personal"]);
+  const [editPri,   setEditPri]   = useState(task.priority);
+  const [newSub,    setNewSub]    = useState("");
+  const [addingNew, setAddingNew] = useState(false);
+  const inputRef = useRef(null);
 
-      return (
-        <div style={{marginBottom:8,borderRadius:16,background:C.surface,border:"1px solid "+C.borderHi,overflow:"hidden",transition:"all 0.2s"}}>
-          {hasSubtasks && (
-            <div style={{height:2,background:C.border}}>
-              <div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,"+cat.color+","+cat.color+"88)",width:(progress*100)+"%",transition:"width 0.4s ease"}} />
+  const cats       = task.categories || ["personal"];
+  const primaryCat = CATEGORIES[cats[0]] || CATEGORIES.personal;
+  const pri        = PRIORITIES[task.priority] || PRIORITIES.medium;
+  const subtasks   = task.subtasks || [];
+  const doneCount  = subtasks.filter(s=>s.done).length;
+  const hasSubtasks = subtasks.length > 0;
+  const progress   = hasSubtasks ? doneCount/subtasks.length : 0;
+  const isMultiCat = cats.length > 1;
+
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+
+  const startEdit = () => {
+    setEditText(task.text);
+    setEditCats(task.categories || ["personal"]);
+    setEditPri(task.priority);
+    setEditing(true);
+    setExpanded(true);
+  };
+
+  const saveEdit = () => {
+    if (!editText.trim()) return;
+    onUpdate(task.id, { text: editText.trim(), categories: editCats, priority: editPri });
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setEditText(task.text);
+    setEditCats(task.categories || ["personal"]);
+    setEditPri(task.priority);
+    setEditing(false);
+  };
+
+  const toggleEditCat = (k) => {
+    setEditCats(prev => prev.includes(k) ? (prev.length>1 ? prev.filter(c=>c!==k) : prev) : [...prev,k]);
+  };
+
+  const submitSub = () => {
+    if (!newSub.trim()) return;
+    onAddSub(task.id, newSub.trim());
+    setNewSub(""); setAddingNew(false);
+  };
+
+  return (
+    <div style={{marginBottom:8,borderRadius:16,background:C.surface,border:`1px solid ${editing?C.cyan:C.borderHi}`,overflow:"hidden",transition:"all 0.2s",boxShadow:editing?`0 0 0 1px ${C.cyan}33`:"none"}}>
+      {/* Top accent bar */}
+      <div style={{height:2,background:C.border}}>
+        <div style={{height:"100%",borderRadius:2,
+          background: hasSubtasks
+            ? `linear-gradient(90deg,${primaryCat.color},${primaryCat.color}88)`
+            : isMultiCat
+              ? `linear-gradient(90deg,${cats.map(c=>(CATEGORIES[c]||CATEGORIES.personal).color).join(",")})`
+              : "transparent",
+          width: hasSubtasks ? `${progress*100}%` : isMultiCat ? "100%" : "0%",
+          transition:"width 0.4s ease", opacity: hasSubtasks ? 1 : 0.6
+        }} />
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px"}}>
+        {/* Check */}
+        <button onClick={()=>onToggle(task.id)} style={{width:24,height:24,borderRadius:"50%",flexShrink:0,border:`2px solid ${task.done?primaryCat.color:C.borderHi}`,background:task.done?primaryCat.color+"33":"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:primaryCat.color,fontSize:11,cursor:"pointer",transition:"all 0.2s"}}>{task.done?"✓":""}</button>
+
+        {/* Title — tap to edit */}
+        <div style={{flex:1,minWidth:0}}>
+          {editing ? (
+            <input ref={inputRef} value={editText} onChange={e=>setEditText(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")saveEdit();if(e.key==="Escape")cancelEdit();}}
+              style={{width:"100%",fontSize:14,fontWeight:500,color:C.text,background:C.surfaceUp,border:`1px solid ${C.cyan}`,borderRadius:8,padding:"5px 10px",outline:"none"}} />
+          ) : (
+            <div onClick={startEdit} style={{fontSize:14,fontWeight:500,color:task.done?C.textDim:C.text,textDecoration:task.done?"line-through":"none",lineHeight:1.3,cursor:"text"}} title="Tap to edit">
+              {task.text}
             </div>
           )}
-          <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px"}}>
-            <button onClick={()=>onToggle(task.id)} style={{width:24,height:24,borderRadius:"50%",flexShrink:0,border:"2px solid "+(task.done?cat.color:C.borderHi),background:task.done?cat.color+"33":"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:cat.color,fontSize:11,cursor:"pointer",transition:"all 0.2s"}}>{task.done?"✓":""}</button>
-            <div style={{flex:1,minWidth:0}} onClick={()=>hasSubtasks&&setExpanded(e=>!e)}>
-              <div style={{fontSize:14,fontWeight:500,color:task.done?C.textDim:C.text,textDecoration:task.done?"line-through":"none",lineHeight:1.3}}>{task.text}</div>
-              <div style={{display:"flex",gap:7,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontSize:10,color:cat.color,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>{cat.icon} {cat.label}</span>
-                <span style={{width:2,height:2,borderRadius:"50%",background:C.borderHi,flexShrink:0}} />
-                <span style={{fontSize:10,color:pri.color,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{pri.label}</span>
-                <span style={{width:2,height:2,borderRadius:"50%",background:C.borderHi,flexShrink:0}} />
-                <span style={{fontSize:9,color:C.textDim,fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase"}}>#{catRank} cat</span>
-                {hasSubtasks && (
-                  <React.Fragment>
-                    <span style={{width:2,height:2,borderRadius:"50%",background:C.borderHi,flexShrink:0}} />
-                    <span style={{fontSize:10,color:C.textMid}}>{doneCount}/{subtasks.length} steps</span>
-                  </React.Fragment>
-                )}
-              </div>
+          {!editing && (
+            <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
+              {cats.map(c=>{ const cat=CATEGORIES[c]||CATEGORIES.personal; return (
+                <span key={c} style={{fontSize:10,color:cat.color,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>{cat.icon} {cat.label}</span>
+              );})}
+              {isMultiCat && <span style={{fontSize:9,color:C.cyan,fontWeight:700,background:C.cyan+"15",padding:"1px 5px",borderRadius:4,border:`1px solid ${C.cyan}33`}}>+{cats.length} cats</span>}
+              <span style={{width:2,height:2,borderRadius:"50%",background:C.borderHi,flexShrink:0}} />
+              <span style={{fontSize:10,color:pri.color,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{pri.label}</span>
+              {hasSubtasks && (<><span style={{width:2,height:2,borderRadius:"50%",background:C.borderHi,flexShrink:0}} /><span style={{fontSize:10,color:C.textMid}}>{doneCount}/{subtasks.length} steps</span></>)}
+              {task.deferred && (<><span style={{width:2,height:2,borderRadius:"50%",background:C.borderHi,flexShrink:0}} /><span style={{fontSize:10,color:C.cyan}}>→ Tomorrow</span></>)}
             </div>
-            <div style={{display:"flex",gap:5,alignItems:"center"}}>
-              {!task.done && (
-                <button onClick={()=>onDefer(task.id)} title="Defer to tomorrow" style={{width:26,height:26,borderRadius:8,background:task.deferred?C.cyan+"22":C.surfaceUp,color:task.deferred?C.cyan:C.textMid,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"1px solid "+(task.deferred?C.cyan+"44":C.border),transition:"all 0.15s"}}>→</button>
-              )}
-              <button onClick={()=>setExpanded(e=>!e)} style={{width:26,height:26,borderRadius:8,background:C.surfaceUp,color:C.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:"1px solid "+C.border}}>{expanded?"▲":"▼"}</button>
-              <button onClick={()=>onDelete(task.id)} style={{color:C.textDim,fontSize:18,padding:"0 2px",lineHeight:1,cursor:"pointer"}}>×</button>
-            </div>
-          </div>
-          {expanded && (
-            <div style={{padding:"2px 14px 12px 50px",borderTop:"1px solid "+C.border}}>
-              {subtasks.map(sub=>(
-                <SubtaskRow key={sub.id} sub={sub} catColor={cat.color}
-                  onToggle={()=>onToggleSub(task.id,sub.id)}
-                  onDelete={()=>onDeleteSub(task.id,sub.id)} />
-              ))}
-              {addingNew ? (
-                <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
-                  <input autoFocus value={newSub} onChange={e=>setNewSub(e.target.value)}
-                    onKeyDown={e=>{if(e.key==="Enter")submitSub();if(e.key==="Escape")setAddingNew(false);}}
-                    placeholder="Add a step..."
-                    style={{flex:1,padding:"7px 10px",background:C.surfaceUp,borderRadius:8,color:C.text,fontSize:13,border:"1px solid "+C.borderHi,outline:"none"}} />
-                  <button onClick={submitSub} style={{padding:"7px 12px",borderRadius:8,background:cat.color,color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>Add</button>
-                </div>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+          {editing ? (
+            <>
+              <button onClick={saveEdit} style={{padding:"4px 10px",borderRadius:8,background:C.cyan,color:C.bg,fontSize:11,fontWeight:700,cursor:"pointer"}}>Save</button>
+              <button onClick={cancelEdit} style={{padding:"4px 8px",borderRadius:8,background:C.surfaceUp,color:C.textMid,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${C.border}`}}>✕</button>
+            </>
+          ) : (
+            <>
+              {task.deferred ? (
+                <button onClick={()=>onReclaim(task.id)} title="Reclaim to today" style={{width:26,height:26,borderRadius:8,background:C.cyan+"22",color:C.cyan,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${C.cyan}44`,transition:"all 0.15s"}}>↩</button>
               ) : (
-                <button onClick={()=>setAddingNew(true)} style={{marginTop:8,fontSize:12,color:C.textDim,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontWeight:500}}>
-                  <span style={{fontSize:16,lineHeight:1}}>+</span> Add step
-                </button>
+                <button onClick={()=>onDefer(task.id)} title="Defer to tomorrow" style={{width:26,height:26,borderRadius:8,background:C.surfaceUp,color:C.textMid,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${C.border}`,transition:"all 0.15s"}}>→</button>
               )}
+              <button onClick={()=>{ setExpanded(e=>!e); }} style={{width:26,height:26,borderRadius:8,background:C.surfaceUp,color:C.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${C.border}`}}>{expanded?"▲":"▼"}</button>
+              <button onClick={()=>onDelete(task.id)} style={{color:C.textDim,fontSize:18,padding:"0 2px",lineHeight:1,cursor:"pointer"}}>×</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Inline edit controls for categories & priority */}
+      {editing && (
+        <div style={{padding:"0 14px 14px 50px",borderTop:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",margin:"10px 0 6px"}}>Category</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {DEFAULT_CAT_ORDER.map(k=>{ const v=CATEGORIES[k]; const sel=editCats.includes(k); return (
+              <button key={k} onClick={()=>toggleEditCat(k)} style={{padding:"5px 10px",borderRadius:20,fontSize:11,fontWeight:600,background:sel?v.color+"22":C.surfaceUp,color:sel?v.color:C.textMid,border:`1px solid ${sel?v.color+"66":C.border}`,cursor:"pointer"}}>
+                {v.icon} {v.label}{sel?" ✓":""}
+              </button>
+            );})}
+          </div>
+          {editCats.length>1 && (
+            <div style={{fontSize:11,color:C.cyan,marginBottom:10,padding:"5px 9px",background:C.cyan+"11",borderRadius:7,border:`1px solid ${C.cyan}22`}}>⚡ Multi-category bonus active</div>
+          )}
+          <div style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>Priority</div>
+          <div style={{display:"flex",gap:6}}>
+            {Object.entries(PRIORITIES).map(([k,v])=>(
+              <button key={k} onClick={()=>setEditPri(k)} style={{padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:600,flex:1,background:editPri===k?v.color+"22":C.surfaceUp,color:editPri===k?v.color:C.textMid,border:`1px solid ${editPri===k?v.color+"66":C.border}`,cursor:"pointer"}}>{v.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Subtasks */}
+      {expanded && (
+        <div style={{padding:"2px 14px 12px 50px",borderTop:`1px solid ${C.border}`}}>
+          {subtasks.map(sub=>(
+            <SubtaskRow key={sub.id} sub={sub} catColor={primaryCat.color}
+              editing={editing}
+              onToggle={()=>onToggleSub(task.id,sub.id)}
+              onDelete={()=>onDeleteSub(task.id,sub.id)}
+              onTextChange={(txt)=>onUpdateSubText(task.id,sub.id,txt)} />
+          ))}
+          {addingNew ? (
+            <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
+              <input autoFocus value={newSub} onChange={e=>setNewSub(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")submitSub();if(e.key==="Escape")setAddingNew(false);}}
+                placeholder="Add a step..."
+                style={{flex:1,padding:"7px 10px",background:C.surfaceUp,borderRadius:8,color:C.text,fontSize:13,border:`1px solid ${C.borderHi}`,outline:"none"}} />
+              <button onClick={submitSub} style={{padding:"7px 12px",borderRadius:8,background:primaryCat.color,color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>Add</button>
+            </div>
+          ) : (
+            <button onClick={()=>setAddingNew(true)} style={{marginTop:8,fontSize:12,color:C.textDim,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontWeight:500}}>
+              <span style={{fontSize:16,lineHeight:1}}>+</span> Add step
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Priority Settings Tab ─────────────────────────────────────
+function PrioritySettings({ catOrder, setCatOrder, tasks, setTasks }) {
+  const [importMsg, setImportMsg] = useState("");
+  const [dragging,  setDragging]  = useState(null);
+  const [dragOver,  setDragOver]  = useState(null);
+
+  const handleExport = () => {
+    const data = JSON.stringify({ tasks, exportedAt: new Date().toISOString() }, null, 2);
+    const blob = new Blob([data], { type:"application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `my-assistant-backup-${new Date().toLocaleDateString("en-US").replace(/\//g,"-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed   = JSON.parse(ev.target.result);
+        const imported = parsed.tasks || parsed;
+        if (!Array.isArray(imported)) throw new Error();
+        setTasks(migrateTasks(imported));
+        setImportMsg(`✓ ${imported.length} tasks imported`);
+        setTimeout(()=>setImportMsg(""), 3000);
+      } catch {
+        setImportMsg("✗ Invalid file — use a valid backup");
+        setTimeout(()=>setImportMsg(""), 3000);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleDragStart = (e,k) => { setDragging(k); e.dataTransfer.effectAllowed="move"; };
+  const handleDragOver  = (e,k) => { e.preventDefault(); if(k!==dragging)setDragOver(k); };
+  const handleDrop = (e,k) => {
+    e.preventDefault();
+    if(!dragging||dragging===k){setDragging(null);setDragOver(null);return;}
+    const n=[...catOrder],fi=n.indexOf(dragging),ti=n.indexOf(k);
+    n.splice(fi,1);n.splice(ti,0,dragging);
+    setCatOrder(n);setDragging(null);setDragOver(null);
+  };
+  const handleDragEnd = ()=>{setDragging(null);setDragOver(null);};
+  const moveUp   = (i)=>{if(i===0)return;const n=[...catOrder];[n[i-1],n[i]]=[n[i],n[i-1]];setCatOrder(n);};
+  const moveDown = (i)=>{if(i===catOrder.length-1)return;const n=[...catOrder];[n[i],n[i+1]]=[n[i+1],n[i]];setCatOrder(n);};
+
+  return (
+    <div style={{flex:1,overflowY:"auto",padding:"8px 18px 120px"}}>
+      <div style={{background:C.surface,border:`1px solid ${C.borderHi}`,borderRadius:16,padding:"16px 18px",marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.cyan,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>How it works</div>
+        <div style={{fontSize:13,color:C.textMid,lineHeight:1.6}}>
+          Tasks sort by <span style={{color:C.amber}}>category rank</span> + <span style={{color:C.red}}>priority level</span>. Tasks in <span style={{color:C.cyan}}>multiple categories</span> get a bonus — they float higher because they touch more areas of your life.
+        </div>
+        <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
+          {[["High",C.red],["Medium",C.amber],["Low",C.textMid]].map(([p,clr])=>(
+            <div key={p} style={{background:C.surfaceUp,borderRadius:10,padding:"8px 12px",border:`1px solid ${C.border}`,flex:1,minWidth:80}}>
+              <div style={{fontSize:11,fontWeight:700,color:clr}}>{p}</div>
+              <div style={{fontSize:10,color:C.textDim,marginTop:2}}>{p==="High"?"Top score":p==="Medium"?"Mid score":"Base score"}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{fontSize:11,fontWeight:700,color:C.textDim,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>Category Rank — drag to reorder</div>
+
+      {catOrder.map((key,i)=>{
+        const cat=CATEGORIES[key],isDraggingThis=dragging===key,isOver=dragOver===key;
+        return (
+          <div key={key} draggable
+            onDragStart={e=>handleDragStart(e,key)} onDragOver={e=>handleDragOver(e,key)}
+            onDrop={e=>handleDrop(e,key)} onDragEnd={handleDragEnd}
+            style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:8,borderRadius:14,background:isOver?C.surfaceUp:C.surface,border:`1px solid ${isOver?cat.color+"66":isDraggingThis?cat.color+"44":C.borderHi}`,opacity:isDraggingThis?0.45:1,cursor:"grab",transition:"all 0.15s",boxShadow:isOver?`0 0 12px ${cat.color}33`:"none"}}>
+            <div style={{width:32,height:32,borderRadius:10,background:cat.color+"22",border:`1px solid ${cat.color}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{fontSize:14,fontWeight:800,color:cat.color}}>{i+1}</span>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:15,fontWeight:600,color:C.text}}>{cat.icon} {cat.label}</div>
+              <div style={{fontSize:11,color:C.textDim,marginTop:2}}>{i===0?"Highest priority":i===catOrder.length-1?"Lowest priority":`Priority ${i+1}`}</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <button onClick={()=>moveUp(i)} disabled={i===0} style={{width:24,height:24,borderRadius:6,background:i===0?C.border:C.surfaceUp,color:i===0?C.textDim:C.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:i===0?"default":"pointer",border:`1px solid ${C.border}`}}>▲</button>
+              <button onClick={()=>moveDown(i)} disabled={i===catOrder.length-1} style={{width:24,height:24,borderRadius:6,background:i===catOrder.length-1?C.border:C.surfaceUp,color:i===catOrder.length-1?C.textDim:C.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:i===catOrder.length-1?"default":"pointer",border:`1px solid ${C.border}`}}>▼</button>
+            </div>
+            <div style={{color:C.textDim,fontSize:18,lineHeight:1,paddingLeft:4,userSelect:"none"}}>⠿</div>
+          </div>
+        );
+      })}
+
+      <button onClick={()=>setCatOrder([...DEFAULT_CAT_ORDER])} style={{marginTop:8,width:"100%",padding:"12px",borderRadius:12,fontSize:13,fontWeight:600,color:C.textMid,background:C.surfaceUp,border:`1px solid ${C.border}`,cursor:"pointer"}}>
+        Reset to Default Order
+      </button>
+
+      {/* Backup & Restore */}
+      <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.textDim,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12}}>Backup & Restore</div>
+        <div style={{fontSize:12,color:C.textMid,lineHeight:1.6,marginBottom:14}}>Export your tasks before updating the app. Import them after to restore everything.</div>
+        <button onClick={handleExport} style={{width:"100%",padding:"13px",borderRadius:12,fontSize:13,fontWeight:700,background:`linear-gradient(135deg,${C.cyan},${C.green})`,color:C.bg,marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 16px ${C.cyan}33`}}>
+          <span style={{fontSize:16}}>⬇</span> Export Tasks
+        </button>
+        <label style={{width:"100%",padding:"13px",borderRadius:12,fontSize:13,fontWeight:700,background:C.surfaceUp,color:C.textMid,border:`1px solid ${C.borderHi}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          <span style={{fontSize:16}}>⬆</span> Import Tasks
+          <input type="file" accept=".json" onChange={handleImport} style={{display:"none"}} />
+        </label>
+        {importMsg && (
+          <div style={{marginTop:10,padding:"10px 14px",borderRadius:10,fontSize:12,fontWeight:600,background:importMsg.startsWith("✓")?C.green+"18":C.red+"18",color:importMsg.startsWith("✓")?C.green:C.red,border:`1px solid ${importMsg.startsWith("✓")?C.green+"44":C.red+"44"}`}}>
+            {importMsg}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────
+function App() {
+  const [tasks,    setTasks]       = useState(()=>restoreDeferredTasks(migrateTasks(load(TASKS_KEY, defaultTasks))));
+  const [catOrder, setCatOrderRaw] = useState(()=>load(CATORDER_KEY, DEFAULT_CAT_ORDER));
+  const [filter,   setFilter]      = useState("all");
+  const [newTask,  setNewTask]     = useState("");
+  const [newCats,  setNewCats]     = useState(["personal"]);
+  const [newPri,   setNewPri]      = useState("medium");
+  const [view,     setView]        = useState("tasks");
+  const [addOpen,  setAddOpen]     = useState(false);
+
+  const setCatOrder = (o)=>{setCatOrderRaw(o);save(CATORDER_KEY,o);};
+  useEffect(()=>{save(TASKS_KEY,tasks);},[tasks]);
+
+  // Check every minute whether deferred tasks need restoring
+  useEffect(()=>{
+    const check = ()=>setTasks(prev=>restoreDeferredTasks(prev));
+    const interval = setInterval(check, 60000);
+    return ()=>clearInterval(interval);
+  },[]);
+
+  const toggleNewCat = (k)=>setNewCats(prev=>prev.includes(k)?(prev.length>1?prev.filter(c=>c!==k):prev):[...prev,k]);
+
+  const addTask = ()=>{
+    if(!newTask.trim())return;
+    setTasks(p=>[...p,{id:Date.now(),text:newTask.trim(),categories:newCats,priority:newPri,done:false,deferred:false,createdAt:Date.now(),subtasks:[]}]);
+    setNewTask("");setNewCats(["personal"]);setAddOpen(false);
+  };
+
+  const toggleTask    = (id)       => setTasks(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
+  const deleteTask    = (id)       => setTasks(p=>p.filter(t=>t.id!==id));
+  const deferTask     = (id)       => setTasks(p=>p.map(t=>t.id===id?{...t,deferred:true,deferredUntil:Date.now()+86400000}:t));
+  const reclaimTask   = (id)       => setTasks(p=>p.map(t=>t.id===id?{...t,deferred:false,deferredUntil:null}:t));
+  const updateTask    = (id,patch) => setTasks(p=>p.map(t=>t.id===id?{...t,...patch}:t));
+  const toggleSub     = (tid,sid)  => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:t.subtasks.map(s=>s.id===sid?{...s,done:!s.done}:s)}:t));
+  const deleteSub     = (tid,sid)  => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:t.subtasks.filter(s=>s.id!==sid)}:t));
+  const addSub        = (tid,txt)  => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:[...(t.subtasks||[]),{id:Date.now(),text:txt,done:false}]}:t));
+  const updateSubText = (tid,sid,txt) => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:t.subtasks.map(s=>s.id===sid?{...s,text:txt}:s)}:t));
+
+  const activeTasks   = tasks.filter(t=>!t.done&&!t.deferred);
+  const deferredTasks = tasks.filter(t=>t.deferred&&!t.done);
+
+  const visibleTasks = (filter==="tomorrow"
+    ? deferredTasks
+    : filter==="all"
+      ? activeTasks
+      : activeTasks.filter(t=>(t.categories||["personal"]).includes(filter))
+  ).slice().sort((a,b)=>taskScore(b,catOrder)-taskScore(a,catOrder));
+
+  const doneCt  = tasks.filter(t=>t.done).length;
+  const totalCt = tasks.length;
+  const deferCt = deferredTasks.length;
+
+  const catFilters = [["all","All"],...catOrder.map(k=>[k,CATEGORIES[k].icon+" "+CATEGORIES[k].label]),["tomorrow","→ Tomorrow"]];
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Syne','Helvetica Neue',sans-serif",display:"flex",flexDirection:"column",maxWidth:430,margin:"0 auto",position:"relative"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Literata:ital,wght@0,300;0,400;1,300&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:0;}
+        input{outline:none;border:none;background:transparent;}
+        button{cursor:pointer;border:none;background:transparent;}
+        .pill{transition:all 0.15s ease;}.pill:active{transform:scale(0.94);}
+        .fab:active{transform:scale(0.92);}
+        .sheet{animation:slideUp 0.22s cubic-bezier(0.32,0.72,0,1);}
+        @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        [draggable]{-webkit-user-drag:element;}
+      `}</style>
+
+      {/* Header */}
+      <div style={{padding:"50px 22px 16px",background:`linear-gradient(180deg,${C.surface} 0%,${C.bg} 100%)`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:C.cyan,letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:3}}>
+              {new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"})}
+            </div>
+            <div style={{fontFamily:"'Literata',serif",fontSize:32,lineHeight:1.1,color:C.text,fontWeight:300}}>
+              {view==="tasks"?"Your Day":"Priority Settings"}
+            </div>
+          </div>
+          {view==="tasks" && (
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:30,fontFamily:"'Syne',sans-serif",fontWeight:800,color:C.amber,lineHeight:1}}>{doneCt}</div>
+              <div style={{fontSize:10,color:C.textMid,marginTop:2}}>of {totalCt} done</div>
+              {deferCt>0 && <div style={{fontSize:10,color:C.cyan,marginTop:1}}>{deferCt} tomorrow</div>}
             </div>
           )}
         </div>
-      );
-    }
-
-    function PrioritySettings({ catOrder, setCatOrder }) {
-      const [dragging, setDragging] = useState(null);
-      const [dragOver, setDragOver] = useState(null);
-
-      const handleDragStart = (e, key) => { setDragging(key); e.dataTransfer.effectAllowed = "move"; };
-      const handleDragOver  = (e, key) => { e.preventDefault(); if(key!==dragging) setDragOver(key); };
-      const handleDrop = (e, key) => {
-        e.preventDefault();
-        if (!dragging || dragging===key) { setDragging(null); setDragOver(null); return; }
-        const next = [...catOrder];
-        const fi = next.indexOf(dragging), ti = next.indexOf(key);
-        next.splice(fi,1); next.splice(ti,0,dragging);
-        setCatOrder(next); setDragging(null); setDragOver(null);
-      };
-      const handleDragEnd = () => { setDragging(null); setDragOver(null); };
-      const moveUp   = (i) => { if(i===0) return; const n=[...catOrder]; [n[i-1],n[i]]=[n[i],n[i-1]]; setCatOrder(n); };
-      const moveDown = (i) => { if(i===catOrder.length-1) return; const n=[...catOrder]; [n[i],n[i+1]]=[n[i+1],n[i]]; setCatOrder(n); };
-
-      return (
-        <div style={{flex:1,overflowY:"auto",padding:"8px 18px 120px"}}>
-          <div style={{background:C.surface,border:"1px solid "+C.borderHi,borderRadius:16,padding:"16px 18px",marginBottom:20}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.cyan,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>How it works</div>
-            <div style={{fontSize:13,color:C.textMid,lineHeight:1.6}}>
-              Tasks are automatically sorted by a score combining your <span style={{color:C.amber}}>category rank</span> and <span style={{color:C.red}}>priority level</span>. Drag or use ▲▼ to reorder categories.
-            </div>
-            <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[["High",C.red],["Medium",C.amber],["Low",C.textMid]].map(([p,clr])=>(
-                <div key={p} style={{background:C.surfaceUp,borderRadius:10,padding:"8px 12px",border:"1px solid "+C.border,flex:1,minWidth:80}}>
-                  <div style={{fontSize:11,fontWeight:700,color:clr}}>{p}</div>
-                  <div style={{fontSize:10,color:C.textDim,marginTop:2}}>{p==="High"?"Top score":p==="Medium"?"Mid score":"Base score"}</div>
-                </div>
-              ))}
-            </div>
+        {view==="tasks" && totalCt>0 && (
+          <div style={{marginTop:14,height:3,background:C.border,borderRadius:4}}>
+            <div style={{height:"100%",borderRadius:4,background:`linear-gradient(90deg,${C.cyan},${C.green})`,width:`${(doneCt/totalCt)*100}%`,transition:"width 0.5s ease",boxShadow:`0 0 8px ${C.cyan}66`}} />
           </div>
+        )}
+      </div>
 
-          <div style={{fontSize:11,fontWeight:700,color:C.textDim,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>Category Rank — drag to reorder</div>
-
-          {catOrder.map((key,i) => {
-            const cat = CATEGORIES[key];
-            const isDraggingThis = dragging===key;
-            const isOver = dragOver===key;
+      {/* Filter pills */}
+      {view==="tasks" && (
+        <div style={{padding:"10px 22px",display:"flex",gap:6,overflowX:"auto"}}>
+          {catFilters.map(([val,lbl])=>{
+            const active=filter===val;
+            const catColor=val==="all"?C.cyan:val==="tomorrow"?C.cyan:(CATEGORIES[val]?.color||C.cyan);
             return (
-              <div key={key} draggable
-                onDragStart={e=>handleDragStart(e,key)}
-                onDragOver={e=>handleDragOver(e,key)}
-                onDrop={e=>handleDrop(e,key)}
-                onDragEnd={handleDragEnd}
-                style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:8,borderRadius:14,background:isOver?C.surfaceUp:C.surface,border:"1px solid "+(isOver?cat.color+"66":isDraggingThis?cat.color+"44":C.borderHi),opacity:isDraggingThis?0.45:1,cursor:"grab",transition:"all 0.15s",boxShadow:isOver?"0 0 12px "+cat.color+"33":"none"}}>
-                <div style={{width:32,height:32,borderRadius:10,background:cat.color+"22",border:"1px solid "+cat.color+"44",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:14,fontWeight:800,color:cat.color,fontFamily:"'Syne',sans-serif"}}>{i+1}</span>
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:15,fontWeight:600,color:C.text}}>{cat.icon} {cat.label}</div>
-                  <div style={{fontSize:11,color:C.textDim,marginTop:2}}>{i===0?"Highest priority":i===catOrder.length-1?"Lowest priority":"Priority "+(i+1)}</div>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                  <button onClick={()=>moveUp(i)} disabled={i===0} style={{width:24,height:24,borderRadius:6,background:i===0?C.border:C.surfaceUp,color:i===0?C.textDim:C.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:i===0?"default":"pointer",border:"1px solid "+C.border}}>▲</button>
-                  <button onClick={()=>moveDown(i)} disabled={i===catOrder.length-1} style={{width:24,height:24,borderRadius:6,background:i===catOrder.length-1?C.border:C.surfaceUp,color:i===catOrder.length-1?C.textDim:C.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:i===catOrder.length-1?"default":"pointer",border:"1px solid "+C.border}}>▼</button>
-                </div>
-                <div style={{color:C.textDim,fontSize:18,lineHeight:1,paddingLeft:4,userSelect:"none"}}>⠿</div>
-              </div>
+              <button key={val} className="pill" onClick={()=>setFilter(val)} style={{padding:"5px 13px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap",letterSpacing:"0.04em",background:active?catColor:C.surfaceUp,color:active?C.bg:C.textMid,border:`1px solid ${active?catColor:C.border}`,boxShadow:active?`0 0 12px ${catColor}44`:"none"}}>{lbl}</button>
             );
           })}
-
-          <button onClick={()=>setCatOrder([...DEFAULT_CAT_ORDER])} style={{marginTop:8,width:"100%",padding:"12px",borderRadius:12,fontSize:13,fontWeight:600,color:C.textMid,background:C.surfaceUp,border:"1px solid "+C.border,cursor:"pointer"}}>
-            Reset to Default Order
-          </button>
         </div>
-      );
-    }
+      )}
 
-    function App() {
-      const [tasks,       setTasks]       = useState(()=>load(TASKS_KEY, defaultTasks));
-      const [catOrder,    setCatOrderRaw] = useState(()=>load(CATORDER_KEY, DEFAULT_CAT_ORDER));
-      const [filter,      setFilter]      = useState("all");
-      const [newTask,     setNewTask]     = useState("");
-      const [newCat,      setNewCat]      = useState("personal");
-      const [newPri,      setNewPri]      = useState("medium");
-      const [view,        setView]        = useState("tasks");
-      const [addOpen,     setAddOpen]     = useState(false);
+      {/* Auto-sort indicator */}
+      {view==="tasks" && filter==="all" && visibleTasks.length>0 && (
+        <div style={{padding:"0 22px 6px",display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:C.cyan,boxShadow:`0 0 6px ${C.cyan}`}} />
+          <span style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase"}}>Auto-sorted by priority</span>
+        </div>
+      )}
 
-      const setCatOrder = (order) => { setCatOrderRaw(order); save(CATORDER_KEY, order); };
-      useEffect(()=>{ save(TASKS_KEY, tasks); }, [tasks]);
-
-      const addTask    = () => { if(!newTask.trim()) return; setTasks(p=>[...p,{id:Date.now(),text:newTask.trim(),category:newCat,priority:newPri,done:false,deferred:false,createdAt:Date.now(),subtasks:[]}]); setNewTask(""); setAddOpen(false); };
-      const toggleTask = (id)      => setTasks(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
-      const deleteTask = (id)      => setTasks(p=>p.filter(t=>t.id!==id));
-      const deferTask  = (id)      => setTasks(p=>p.map(t=>t.id===id?{...t,deferred:!t.deferred,deferredUntil:!t.deferred?Date.now()+86400000:null}:t));
-      const toggleSub  = (tid,sid) => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:t.subtasks.map(s=>s.id===sid?{...s,done:!s.done}:s)}:t));
-      const deleteSub  = (tid,sid) => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:t.subtasks.filter(s=>s.id!==sid)}:t));
-      const addSub     = (tid,txt) => setTasks(p=>p.map(t=>t.id===tid?{...t,subtasks:[...(t.subtasks||[]),{id:Date.now(),text:txt,done:false}]}:t));
-
-      const activeTasks   = tasks.filter(t=>!t.done&&!t.deferred);
-      const visibleTasks  = (filter==="all"?activeTasks:activeTasks.filter(t=>t.category===filter)).slice().sort((a,b)=>taskScore(b,catOrder)-taskScore(a,catOrder));
-      const doneCt  = tasks.filter(t=>t.done).length;
-      const totalCt = tasks.length;
-      const deferCt = tasks.filter(t=>t.deferred&&!t.done).length;
-      const catFilters = [["all","All"],...catOrder.map(k=>[k,CATEGORIES[k].icon+" "+CATEGORIES[k].label])];
-
-      return (
-        <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Syne','Helvetica Neue',sans-serif",display:"flex",flexDirection:"column",maxWidth:430,margin:"0 auto",position:"relative"}}>
-
-          {/* Header */}
-          <div style={{padding:"50px 22px 16px",background:"linear-gradient(180deg,"+C.surface+" 0%,"+C.bg+" 100%)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div>
-                <div style={{fontSize:11,fontWeight:600,color:C.cyan,letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:3}}>
-                  {new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"})}
-                </div>
-                <div style={{fontFamily:"'Literata',serif",fontSize:32,lineHeight:1.1,color:C.text,fontWeight:300}}>
-                  {view==="tasks"?"Your Day":"Priority Settings"}
-                </div>
-              </div>
-              {view==="tasks" && (
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:30,fontFamily:"'Syne',sans-serif",fontWeight:800,color:C.amber,lineHeight:1}}>{doneCt}</div>
-                  <div style={{fontSize:10,color:C.textMid,marginTop:2}}>of {totalCt} done</div>
-                  {deferCt>0 && <div style={{fontSize:10,color:C.cyan,marginTop:1}}>{deferCt} tomorrow</div>}
-                </div>
-              )}
+      {/* Task list */}
+      {view==="tasks" && (
+        <div style={{flex:1,overflowY:"auto",padding:"4px 18px 130px"}}>
+          {visibleTasks.length===0 && (
+            <div style={{textAlign:"center",padding:"60px 0",color:C.textDim}}>
+              <div style={{fontSize:36,marginBottom:10,animation:"pulse 3s ease infinite"}}>◈</div>
+              <div style={{fontSize:13}}>{filter==="tomorrow"?"No tasks deferred to tomorrow":"All clear — nice work"}</div>
             </div>
-            {view==="tasks" && totalCt>0 && (
-              <div style={{marginTop:14,height:3,background:C.border,borderRadius:4}}>
-                <div style={{height:"100%",borderRadius:4,background:"linear-gradient(90deg,"+C.cyan+","+C.green+")",width:((doneCt/totalCt)*100)+"%",transition:"width 0.5s ease",boxShadow:"0 0 8px "+C.cyan+"66"}} />
-              </div>
+          )}
+          {visibleTasks.map(task=>(
+            <TaskCard key={task.id} task={task} catOrder={catOrder}
+              onToggle={toggleTask} onDelete={deleteTask}
+              onDefer={deferTask} onReclaim={reclaimTask}
+              onUpdate={updateTask}
+              onToggleSub={toggleSub} onDeleteSub={deleteSub}
+              onAddSub={addSub} onUpdateSubText={updateSubText} />
+          ))}
+        </div>
+      )}
+
+      {/* Settings */}
+      {view==="settings" && <PrioritySettings catOrder={catOrder} setCatOrder={setCatOrder} tasks={tasks} setTasks={setTasks} />}
+
+      {/* Add task sheet */}
+      {addOpen && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:50,display:"flex",alignItems:"flex-end"}} onClick={()=>setAddOpen(false)}>
+          <div className="sheet" style={{width:"100%",maxWidth:430,margin:"0 auto",background:C.surface,borderRadius:"22px 22px 0 0",padding:"22px 22px 44px",border:`1px solid ${C.borderHi}`}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:36,height:3,background:C.borderHi,borderRadius:4,margin:"0 auto 18px"}} />
+            <div style={{fontFamily:"'Literata',serif",fontSize:22,marginBottom:14,fontWeight:300,color:C.text}}>New Task</div>
+            <input autoFocus placeholder="What needs to get done?" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()}
+              style={{width:"100%",padding:"13px 15px",background:C.surfaceUp,borderRadius:12,color:C.text,fontSize:15,marginBottom:14,border:`1px solid ${C.borderHi}`}} />
+            <div style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>
+              Category <span style={{color:C.cyan,fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:10}}>(select one or more)</span>
+            </div>
+            <div style={{display:"flex",gap:7,marginBottom:14,flexWrap:"wrap"}}>
+              {catOrder.map((k,i)=>{const v=CATEGORIES[k],sel=newCats.includes(k);return(
+                <button key={k} className="pill" onClick={()=>toggleNewCat(k)} style={{padding:"6px 12px",borderRadius:20,fontSize:11,fontWeight:600,background:sel?v.color+"22":C.surfaceUp,color:sel?v.color:C.textMid,border:`1px solid ${sel?v.color+"66":C.border}`,boxShadow:sel?`0 0 8px ${v.color}33`:"none"}}>
+                  <span style={{fontSize:9,color:C.textDim,marginRight:3}}>#{i+1}</span>{v.icon} {v.label}{sel?" ✓":""}
+                </button>
+              );})}
+            </div>
+            {newCats.length>1 && (
+              <div style={{fontSize:11,color:C.cyan,marginBottom:12,padding:"6px 10px",background:C.cyan+"11",borderRadius:8,border:`1px solid ${C.cyan}22`}}>⚡ Multi-category bonus — this task will sort higher</div>
             )}
-          </div>
-
-          {/* Filter pills */}
-          {view==="tasks" && (
-            <div style={{padding:"10px 22px",display:"flex",gap:6,overflowX:"auto"}}>
-              {catFilters.map(([val,lbl])=>{
-                const active = filter===val;
-                const catColor = val==="all"?C.cyan:(CATEGORIES[val]&&CATEGORIES[val].color)||C.cyan;
-                return (
-                  <button key={val} className="pill" onClick={()=>setFilter(val)} style={{padding:"5px 13px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap",letterSpacing:"0.04em",background:active?catColor:C.surfaceUp,color:active?C.bg:C.textMid,border:"1px solid "+(active?catColor:C.border),boxShadow:active?"0 0 12px "+catColor+"44":"none"}}>{lbl}</button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Auto-sort indicator */}
-          {view==="tasks" && filter==="all" && visibleTasks.length>0 && (
-            <div style={{padding:"0 22px 6px",display:"flex",alignItems:"center",gap:6}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:C.cyan,boxShadow:"0 0 6px "+C.cyan}} />
-              <span style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase"}}>Auto-sorted by priority</span>
-            </div>
-          )}
-
-          {/* Task list */}
-          {view==="tasks" && (
-            <div style={{flex:1,overflowY:"auto",padding:"4px 18px 130px"}}>
-              {visibleTasks.length===0 && (
-                <div style={{textAlign:"center",padding:"60px 0",color:C.textDim}}>
-                  <div style={{fontSize:36,marginBottom:10,animation:"pulse 3s ease infinite"}}>◈</div>
-                  <div style={{fontSize:13}}>All clear — nice work</div>
-                </div>
-              )}
-              {visibleTasks.map(task=>(
-                <TaskCard key={task.id} task={task} catOrder={catOrder}
-                  onToggle={toggleTask} onDelete={deleteTask} onDefer={deferTask}
-                  onToggleSub={toggleSub} onDeleteSub={deleteSub} onAddSub={addSub} />
+            <div style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Priority</div>
+            <div style={{display:"flex",gap:7,marginBottom:20}}>
+              {Object.entries(PRIORITIES).map(([k,v])=>(
+                <button key={k} className="pill" onClick={()=>setNewPri(k)} style={{padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,flex:1,background:newPri===k?v.color+"22":C.surfaceUp,color:newPri===k?v.color:C.textMid,border:`1px solid ${newPri===k?v.color+"66":C.border}`,boxShadow:newPri===k?`0 0 8px ${v.color}33`:"none"}}>{v.label}</button>
               ))}
             </div>
-          )}
-
-          {/* Settings */}
-          {view==="settings" && <PrioritySettings catOrder={catOrder} setCatOrder={setCatOrder} />}
-
-          {/* Add task sheet */}
-          {addOpen && (
-            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:50,display:"flex",alignItems:"flex-end"}} onClick={()=>setAddOpen(false)}>
-              <div className="sheet" style={{width:"100%",maxWidth:430,margin:"0 auto",background:C.surface,borderRadius:"22px 22px 0 0",padding:"22px 22px 44px",border:"1px solid "+C.borderHi}} onClick={e=>e.stopPropagation()}>
-                <div style={{width:36,height:3,background:C.borderHi,borderRadius:4,margin:"0 auto 18px"}} />
-                <div style={{fontFamily:"'Literata',serif",fontSize:22,marginBottom:14,fontWeight:300,color:C.text}}>New Task</div>
-                <input autoFocus placeholder="What needs to get done?" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()}
-                  style={{width:"100%",padding:"13px 15px",background:C.surfaceUp,borderRadius:12,color:C.text,fontSize:15,marginBottom:14,border:"1px solid "+C.borderHi}} />
-                <div style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Category</div>
-                <div style={{display:"flex",gap:7,marginBottom:14,flexWrap:"wrap"}}>
-                  {catOrder.map((k,i)=>{ const v=CATEGORIES[k]; return (
-                    <button key={k} className="pill" onClick={()=>setNewCat(k)} style={{padding:"6px 12px",borderRadius:20,fontSize:11,fontWeight:600,background:newCat===k?v.color+"22":C.surfaceUp,color:newCat===k?v.color:C.textMid,border:"1px solid "+(newCat===k?v.color+"66":C.border),boxShadow:newCat===k?"0 0 8px "+v.color+"33":"none"}}>
-                      <span style={{fontSize:9,color:C.textDim,marginRight:3}}>#{i+1}</span>{v.icon} {v.label}
-                    </button>
-                  );})}
-                </div>
-                <div style={{fontSize:10,color:C.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Priority</div>
-                <div style={{display:"flex",gap:7,marginBottom:20}}>
-                  {Object.entries(PRIORITIES).map(([k,v])=>(
-                    <button key={k} className="pill" onClick={()=>setNewPri(k)} style={{padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,flex:1,background:newPri===k?v.color+"22":C.surfaceUp,color:newPri===k?v.color:C.textMid,border:"1px solid "+(newPri===k?v.color+"66":C.border),boxShadow:newPri===k?"0 0 8px "+v.color+"33":"none"}}>{v.label}</button>
-                  ))}
-                </div>
-                <button onClick={addTask} style={{width:"100%",padding:"15px",borderRadius:14,fontSize:15,fontWeight:700,background:"linear-gradient(135deg,"+C.cyan+","+C.green+")",color:C.bg,letterSpacing:"0.04em",boxShadow:"0 4px 20px "+C.cyan+"44",cursor:"pointer"}}>Add Task</button>
-              </div>
-            </div>
-          )}
-
-          {/* Bottom nav */}
-          <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,padding:"10px 28px 30px",background:"linear-gradient(0deg,"+C.bg+" 55%,transparent)",display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:40}}>
-            <button onClick={()=>setView("tasks")} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="tasks"?C.cyan:C.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",filter:view==="tasks"?"drop-shadow(0 0 6px "+C.cyan+")":"none",transition:"all 0.15s"}}>
-              <span style={{fontSize:22}}>☑</span> Tasks
-            </button>
-            {view==="tasks" && (
-              <button className="fab" onClick={()=>setAddOpen(true)} style={{width:56,height:56,borderRadius:"50%",background:"linear-gradient(135deg,"+C.cyan+","+C.green+")",color:C.bg,fontSize:28,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 24px "+C.cyan+"55",cursor:"pointer"}}>+</button>
-            )}
-            {view==="settings" && <div style={{flex:1}} />}
-            <button onClick={()=>setView("settings")} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="settings"?C.cyan:C.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",filter:view==="settings"?"drop-shadow(0 0 6px "+C.cyan+")":"none",transition:"all 0.15s"}}>
-              <span style={{fontSize:22}}>⚙</span> Priority
-            </button>
+            <button onClick={addTask} style={{width:"100%",padding:"15px",borderRadius:14,fontSize:15,fontWeight:700,background:`linear-gradient(135deg,${C.cyan},${C.green})`,color:C.bg,letterSpacing:"0.04em",boxShadow:`0 4px 20px ${C.cyan}44`,cursor:"pointer"}}>Add Task</button>
           </div>
         </div>
-      );
-    }
+      )}
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+      {/* Bottom nav */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,padding:"10px 28px 30px",background:`linear-gradient(0deg,${C.bg} 55%,transparent)`,display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:40}}>
+        <button onClick={()=>setView("tasks")} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="tasks"?C.cyan:C.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",filter:view==="tasks"?`drop-shadow(0 0 6px ${C.cyan})`:"none",transition:"all 0.15s"}}>
+          <span style={{fontSize:22}}>☑</span> Tasks
+        </button>
+        {view==="tasks" && (
+          <button className="fab" onClick={()=>setAddOpen(true)} style={{width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.cyan},${C.green})`,color:C.bg,fontSize:28,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 6px 24px ${C.cyan}55`,cursor:"pointer"}}>+</button>
+        )}
+        {view==="settings" && <div style={{flex:1}} />}
+        <button onClick={()=>setView("settings")} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="settings"?C.cyan:C.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",filter:view==="settings"?`drop-shadow(0 0 6px ${C.cyan})`:"none",transition:"all 0.15s"}}>
+          <span style={{fontSize:22}}>⚙</span> Priority
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
   </script>
 </body>
 </html>
