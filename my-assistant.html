@@ -24,7 +24,6 @@
     button { cursor: pointer; border: none; background: transparent; }
     .pill { transition: all 0.15s ease; }
     .pill:active { transform: scale(0.94); }
-    .fab:active { transform: scale(0.92); }
     .sheet { animation: slideUp 0.22s cubic-bezier(0.32,0.72,0,1); }
     @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -192,10 +191,13 @@ function TaskCard({task,catOrder,cats,cc,onToggle,onDelete,onDefer,onReclaim,onU
             </>
           ):(
             <>
-              {task.deferred
-                ?<button onClick={()=>onReclaim(task.id)} style={{width:26,height:26,borderRadius:8,background:cc.cyan+"22",color:cc.cyan,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${cc.cyan}44`}}>↩</button>
-                :<button onClick={()=>onDefer(task.id)} style={{width:26,height:26,borderRadius:8,background:cc.surfaceUp,color:cc.textMid,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${cc.border}`}}>→</button>
-              }
+              {task.done?(
+                <button onClick={()=>onToggle(task.id)} title="Undo" style={{padding:"4px 10px",borderRadius:8,background:cc.green+"22",color:cc.green,fontSize:11,fontWeight:700,cursor:"pointer",border:`1px solid ${cc.green}44`}}>↩ Undo</button>
+              ):task.deferred?(
+                <button onClick={()=>onReclaim(task.id)} style={{width:26,height:26,borderRadius:8,background:cc.cyan+"22",color:cc.cyan,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${cc.cyan}44`}}>↩</button>
+              ):(
+                <button onClick={()=>onDefer(task.id)} style={{width:26,height:26,borderRadius:8,background:cc.surfaceUp,color:cc.textMid,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${cc.border}`}}>→</button>
+              )}
               <button onClick={()=>setExpanded(e=>!e)} style={{width:26,height:26,borderRadius:8,background:cc.surfaceUp,color:cc.textMid,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",border:`1px solid ${cc.border}`}}>{expanded?"▲":"▼"}</button>
               <button onClick={()=>onDelete(task.id)} style={{color:cc.textDim,fontSize:18,padding:"0 2px",lineHeight:1,cursor:"pointer"}}>×</button>
             </>
@@ -331,7 +333,7 @@ function ImportSheet({cc,cats,catOrder,onImport,onClose}){
           value={text}
           onChange={e=>setText(e.target.value)}
           placeholder={"Buy groceries\nCall the dentist\nFinish the report\n..."}
-          style={{width:"100%",minHeight:140,padding:"12px 14px",background:cc.surfaceUp,borderRadius:12,color:cc.text,fontSize:14,border:`1px solid ${cc.borderHi}`,outline:"none",resize:"none",lineHeight:1.6,fontFamily:"inherit",display:"block"}}
+          style={{width:"100%",minHeight:140,padding:"12px 14px",background:cc.surfaceUp,borderRadius:12,color:cc.text,fontSize:14,border:`1px solid ${cc.borderHi}`,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"inherit"}}
         />
 
         {lines.length>0&&(
@@ -523,6 +525,55 @@ function PrioritySettings({catOrder,setCatOrder,cats,setCats,tasks,setTasks,them
   );
 }
 
+
+// ── For You Tab ───────────────────────────────────────────────
+function ForYou({cc}){
+  return(
+    <div style={{flex:1,overflowY:"auto",padding:"8px 22px 120px"}}>
+
+      {/* Personal message */}
+      <div style={{background:cc.surface,border:`1px solid ${cc.borderHi}`,borderRadius:20,padding:"22px 20px",marginBottom:20}}>
+        <div style={{fontSize:11,fontWeight:700,color:cc.cyan,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14}}>A Note from the Creator</div>
+
+        <div style={{fontSize:15,fontWeight:800,fontFamily:"'Syne',sans-serif",color:cc.text,marginBottom:14,lineHeight:1.3}}>
+          Done. It's not just the name of this app — it's what I hope you can say at the end of each day.
+        </div>
+
+        <div style={{fontSize:14,color:cc.textMid,lineHeight:1.75,display:"flex",flexDirection:"column",gap:12}}>
+          <p>In a world full of noise, finding the signal is hard. Done is here to help with that.</p>
+          <p>The power of Done is that <span style={{color:cc.text,fontWeight:700}}>you</span> set the priorities. Everything can feel urgent, but ask yourself — does this absolutely need to happen today? If not, it's probably not as urgent as it seems.</p>
+          <p>You also have the power to say things can wait. If you can't fit everything into one day, that's okay. Push it to tomorrow. Reclaim your time.</p>
+          <p style={{color:cc.text,fontWeight:700}}>Now go get things Done.</p>
+        </div>
+      </div>
+
+      {/* What's New */}
+      <div style={{background:cc.surface,border:`1px solid ${cc.borderHi}`,borderRadius:20,padding:"22px 20px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:cc.amber,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:16}}>What's New</div>
+
+        {[
+          ["Custom Categories","Build your own with a name, icon, and color."],
+          ["Import from Notes","Paste a list and Done creates your tasks instantly."],
+          ["✓ Done Filter","See completed tasks and undo them with one tap."],
+          ["New User Welcome","Clean onboarding for first-time users."],
+        ].map(([title,desc])=>(
+          <div key={title} style={{display:"flex",gap:14,marginBottom:16,paddingBottom:16,borderBottom:`1px solid ${cc.border}`}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:cc.cyan,flexShrink:0,marginTop:5}}/>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:cc.text,marginBottom:3}}>{title}</div>
+              <div style={{fontSize:13,color:cc.textMid,lineHeight:1.5}}>{desc}</div>
+            </div>
+          </div>
+        ))}
+
+        <div style={{fontSize:11,color:cc.textDim,textAlign:"center",marginTop:4}}>
+          Made with care. Built to help you get things Done.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────
 function App(){
   const [tasks,       setTasks]       = useState(()=>restoreDeferred(migrateTasks(load(TASKS_KEY,[]))));
@@ -532,7 +583,7 @@ function App(){
   const [newTask,     setNewTask]     = useState("");
   const [newCats,     setNewCats]     = useState([]);
   const [newPri,      setNewPri]      = useState("medium");
-  const [view,        setView]        = useState("tasks");
+  const [view,        setView]        = useState("tasks"); // tasks | settings | foryou
   const [addOpen,     setAddOpen]     = useState(false);
   const [importOpen,  setImportOpen]  = useState(false);
   const [themeOverride,setThemeOverrideSt]=useState(()=>load(THEME_KEY,"system"));
@@ -577,13 +628,14 @@ function App(){
 
   const activeTasks  =tasks.filter(t=>!t.done&&!t.deferred);
   const deferredTasks=tasks.filter(t=>t.deferred&&!t.done);
-  const visibleTasks =(filter==="tomorrow"?deferredTasks:filter==="all"?activeTasks:activeTasks.filter(t=>(t.categories||[catOrder[0]]).includes(filter)))
-    .slice().sort((a,b)=>taskScore(b,catOrder)-taskScore(a,catOrder));
+  const completedTasks=tasks.filter(t=>t.done);
+  const visibleTasks =(filter==="tomorrow"?deferredTasks:filter==="done"?completedTasks:filter==="all"?activeTasks:activeTasks.filter(t=>(t.categories||[catOrder[0]]).includes(filter)))
+    .slice().sort((a,b)=>filter==="done"?b.createdAt-a.createdAt:taskScore(b,catOrder)-taskScore(a,catOrder));
 
   const doneCt =tasks.filter(t=>t.done).length;
   const totalCt=tasks.length;
   const deferCt=deferredTasks.length;
-  const catFilters=[["all","All"],...catOrder.filter(k=>cats[k]).map(k=>[k,cats[k].icon+" "+cats[k].label]),["tomorrow","→ Tomorrow"]];
+  const catFilters=[["all","All"],...catOrder.filter(k=>cats[k]).map(k=>[k,cats[k].icon+" "+cats[k].label]),["tomorrow","→ Tomorrow"],["done","✓ Done"]];
 
   return(
     <div style={{minHeight:"100vh",background:cc.bg,color:cc.text,fontFamily:"'Syne','Helvetica Neue',sans-serif",display:"flex",flexDirection:"column",maxWidth:430,margin:"0 auto",position:"relative",transition:"background 0.3s,color 0.3s"}}>
@@ -608,7 +660,7 @@ function App(){
             <div style={{fontSize:11,fontWeight:600,color:cc.cyan,letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:6}}>
               {new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"})}
             </div>
-            {view==="tasks"?<DoneHeader C={cc}/>:<div style={{fontFamily:"'Literata',serif",fontSize:28,lineHeight:1.1,color:cc.text,fontWeight:300}}>Settings</div>}
+            {view==="tasks"?<DoneHeader C={cc}/>:view==="foryou"?<div style={{fontFamily:"'Literata',serif",fontSize:28,lineHeight:1.1,color:cc.text,fontWeight:300}}>For You</div>:<div style={{fontFamily:"'Literata',serif",fontSize:28,lineHeight:1.1,color:cc.text,fontWeight:300}}>Settings</div>}
           </div>
           {view==="tasks"&&(
             <div style={{textAlign:"right"}}>
@@ -630,14 +682,14 @@ function App(){
         <div style={{padding:"10px 22px",display:"flex",gap:6,overflowX:"auto"}}>
           {catFilters.map(([val,lbl])=>{
             const active=filter===val;
-            const clr=val==="all"||val==="tomorrow"?cc.cyan:(cats[val]?.color||cc.cyan);
+            const clr=val==="all"||val==="tomorrow"?cc.cyan:val==="done"?cc.green:(cats[val]?.color||cc.cyan);
             return<button key={val} className="pill" onClick={()=>setFilter(val)} style={{padding:"5px 13px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap",background:active?clr:cc.surfaceUp,color:active?(cc.isDark?"#0B1120":"#fff"):cc.textMid,border:`1px solid ${active?clr:cc.border}`,boxShadow:active?`0 0 12px ${clr}44`:"none"}}>{lbl}</button>;
           })}
         </div>
       )}
 
       {/* Sort indicator */}
-      {view==="tasks"&&filter==="all"&&visibleTasks.length>0&&(
+      {view==="tasks"&&filter==="all"&&activeTasks.length>0&&(
         <div style={{padding:"0 22px 6px",display:"flex",alignItems:"center",gap:6}}>
           <div style={{width:6,height:6,borderRadius:"50%",background:cc.cyan}}/>
           <span style={{fontSize:10,color:cc.textDim,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase"}}>Auto-sorted by priority</span>
@@ -647,9 +699,19 @@ function App(){
       {/* Task list */}
       {view==="tasks"&&(
         <div style={{flex:1,overflowY:"auto",padding:"4px 18px 130px"}}>
+          {/* Add task tile — always pinned to top */}
+          {filter==="all"&&(
+            <button onClick={()=>setAddOpen(true)} style={{width:"100%",marginBottom:8,padding:"14px 16px",borderRadius:16,background:"transparent",border:`1.5px dashed ${cc.borderHi}`,display:"flex",alignItems:"center",gap:12,cursor:"pointer",transition:"all 0.15s"}}>
+              <div style={{width:24,height:24,borderRadius:"50%",border:`2px dashed ${cc.cyan}`,display:"flex",alignItems:"center",justifyContent:"center",color:cc.cyan,fontSize:16,flexShrink:0,lineHeight:1}}>+</div>
+              <span style={{fontSize:14,fontWeight:500,color:cc.textDim}}>Add a task...</span>
+            </button>
+          )}
+
           {visibleTasks.length===0&&(
             <div style={{textAlign:"center",padding:"60px 40px",color:cc.textDim}}>
-              {filter==="tomorrow"?(
+              {filter==="done"?(
+                <><div style={{fontSize:36,marginBottom:10,animation:"pulse 3s ease infinite"}}>◈</div><div style={{fontSize:13}}>No completed tasks yet</div></>
+              ):filter==="tomorrow"?(
                 <><div style={{fontSize:36,marginBottom:10,animation:"pulse 3s ease infinite"}}>◈</div><div style={{fontSize:13}}>No tasks deferred to tomorrow</div></>
               ):filter==="all"&&activeTasks.length===0?(
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
@@ -699,6 +761,9 @@ function App(){
         </div>
       )}
 
+      {/* For You */}
+      {view==="foryou"&&<ForYou cc={cc}/>}
+
       {/* Settings */}
       {view==="settings"&&(
         <PrioritySettings catOrder={catOrder} setCatOrder={setCatOrder} cats={cats} setCats={setCats}
@@ -743,15 +808,14 @@ function App(){
       )}
 
       {/* Bottom nav */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,padding:"10px 28px 30px",background:`linear-gradient(0deg,${cc.bg} 55%,transparent)`,display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:40}}>
-        <button onClick={()=>setView("tasks")} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="tasks"?cc.cyan:cc.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",transition:"all 0.15s"}}>
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,padding:"10px 0 30px",background:`linear-gradient(0deg,${cc.bg} 55%,transparent)`,display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:40}}>
+        <button onClick={()=>setView("tasks")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="tasks"?cc.cyan:cc.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",transition:"all 0.15s"}}>
           <span style={{fontSize:22}}>☑</span> Tasks
         </button>
-        {view==="tasks"&&(
-          <button className="fab" onClick={()=>setAddOpen(true)} style={{width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${cc.cyan},${cc.green})`,color:cc.isDark?"#0B1120":"#fff",fontSize:28,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 6px 24px ${cc.cyan}44`,cursor:"pointer"}}>+</button>
-        )}
-        {view==="settings"&&<div style={{flex:1}}/>}
-        <button onClick={()=>setView("settings")} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="settings"?cc.cyan:cc.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",transition:"all 0.15s"}}>
+        <button onClick={()=>setView("foryou")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="foryou"?cc.amber:cc.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",transition:"all 0.15s"}}>
+          <span style={{fontSize:20}}>✉️</span> For You
+        </button>
+        <button onClick={()=>setView("settings")} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:view==="settings"?cc.cyan:cc.textDim,fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",transition:"all 0.15s"}}>
           <span style={{fontSize:22}}>⚙</span> Settings
         </button>
       </div>
